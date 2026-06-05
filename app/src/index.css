@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-afri-white font-body text-afri-black;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  h1 {
+    @apply font-heading text-afri-purple;
+  }
+
+  h2,
+  h3,
+  h4 {
+    @apply font-heading text-afri-purple;
+  }
+
+  /* Honour reduced-motion and keep survey forms light on slow connections */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .afri-card {
+    @apply rounded-card bg-afri-white shadow-card border border-afri-lavender;
+  }
+
+  .afri-input {
+    @apply w-full rounded-lg border border-afri-lavender bg-afri-white px-4 py-2.5 text-afri-black
+      placeholder:text-afri-black/40 focus:border-afri-purple focus:outline-none focus:ring-2
+      focus:ring-afri-purple/30;
+  }
+
+  .afri-label {
+    @apply mb-1.5 block font-body text-sm font-medium text-afri-black/80;
+  }
+
+  .afri-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 font-heading
+      font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .afri-btn-primary {
+    @apply afri-btn bg-afri-purple text-afri-white hover:bg-afri-purple/90;
+  }
+
+  .afri-btn-secondary {
+    @apply afri-btn border border-afri-purple bg-afri-white text-afri-purple hover:bg-afri-lavender;
+  }
+
+  .afri-btn-ghost {
+    @apply afri-btn text-afri-purple hover:bg-afri-lavender;
+  }
+}
+
+/* Range slider (SliderInput) - branded thumb/track */
+.afri-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 9999px;
+  background: #f0e7f6;
+  outline: none;
+}
+.afri-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: #8d4087;
+  border: 3px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(141, 64, 135, 0.4);
+  cursor: pointer;
+}
+.afri-range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: #8d4087;
+  border: 3px solid #ffffff;
+  cursor: pointer;
+}

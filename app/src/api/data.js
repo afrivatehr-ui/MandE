@@ -1,0 +1,364 @@
+import { supabase } from '../lib/supabase'
+import { VOLUNTEER_SURVEY, ORG_SURVEY } from '../config/surveyQuestions'
+
+// PostgREST returns embedded one-to-one relations as an object or a single-item
+// array depending on detection; normalise to a single object or null.
+function one(rel) {
+  if (Array.isArray(rel)) return rel[0] ?? null
+  return rel ?? null
+}
+
+const DEPLOYMENT_SELECT = `
+  id, role_title, start_date, end_date, status, vpi_score, vpi_category, action_flag, created_at, updated_at,
+  volunteer_id, organisation_id,
+  volunteers ( id, volunteer_id, full_name, email ),
+  organisations ( id, name, sector ),
+  survey_tokens ( type, token, used, expires_at ),
+  volunteer_surveys ( id, submitted_at, volunteer_vpi, onboarding_avg, work_exp_avg, org_env_avg,
+    s5_overall_satisfaction, s5_nps_score, s5_volunteer_again ),
+  org_surveys ( id, submitted_at, supervisor_name, supervisor_title, task_perf_avg, professionalism_avg, impact_avg, org_vpi,
+    s5_overall_effectiveness, s5_request_again, s5_request_same_vol,
+    s6_strengths, s6_improvements )
+`
+
+// Fuller select for detail pages (complete survey answers for expandable views).
+const DEPLOYMENT_DETAIL_SELECT = `
+  id, role_title, start_date, end_date, status, vpi_score, vpi_category, action_flag, created_at, updated_at,
+  volunteer_id, organisation_id,
+  volunteers ( id, volunteer_id, full_name, email, phone ),
+  organisations ( id, name, sector, contact_name, contact_email ),
+  volunteer_surveys ( * ),
+  org_surveys ( * )
+`
+
+function normaliseDeployment(d) {
+  const vol = one(d.volunteers)
+  const org = one(d.organisations)
+  const volSurvey = one(d.volunteer_surveys)
+  const orgSurvey = one(d.org_surveys)
+  const tokenList = Array.isArray(d.survey_tokens) ? d.survey_tokens : []
+  const tokens = {}
+  for (const t of tokenList) tokens[t.type] = t.token
+  return {
+    ...d,
+    tokens,
+    volunteer: vol,
+    organisation: org,
+    volSurvey,
+    orgSurvey,
+    volunteerName: vol?.full_name ?? '—',
+    volunteerCode: vol?.volunteer_id ?? '—',
+    orgName: org?.name ?? '—',
+    volSubmitted: Boolean(volSurvey),
+    orgSubmitted: Boolean(orgSurvey),
+    task: orgSurvey?.task_perf_avg ?? null,
+    prof: orgSurvey?.professionalism_avg ?? null,
+    impact: orgSurvey?.impact_avg ?? null,
+    overall: orgSurvey?.s5_overall_effectiveness ?? null,
+    vpi: d.vpi_score,
+    category: d.vpi_category,
+  }
+}
+
+export async function fetchDeployments() {
+  const { data, error } = await supabase
+    .from('deployments')
+    .select(DEPLOYMENT_SELECT)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data.map(normaliseDeployment)
+}
+
+export async function fetchVolunteers() {
+  const { data, error } = await supabase.from('volunteers').select('*').order('full_name')
+  if (error) throw error
+  return data
+}
+
+export async function fetchOrganisations() {
+  const { data, error } = await supabase.from('organisations').select('*').order('name')
+  if (error) throw error
+  return data
+}
+
+export async function fetchVolunteer(id) {
+  const { data, error } = await supabase.from('volunteers').select('*').eq('id', id).single()
+  if (error) throw error
+  const { data: deps, error: depErr } = await supabase
+    .from('deployments')
+    .select(DEPLOYMENT_DETAIL_SELECT)
+    .eq('volunteer_id', id)
+    .order('start_date', { ascending: false })
+  if (depErr) throw depErr
+  return { volunteer: data, deployments: deps.map(normaliseDeployment) }
+}
+
+export async function fetchOrganisation(id) {
+  const { data, error } = await supabase.from('organisations').select('*').eq('id', id).single()
+  if (error) throw error
+  const { data: deps, error: depErr } = await supabase
+    .from('deployments')
+    .select(DEPLOYMENT_DETAIL_SELECT)
+    .eq('organisation_id', id)
+    .order('start_date', { ascending: false })
+  if (depErr) throw depErr
+  return { organisation: data, deployments: deps.map(normaliseDeployment) }
+}
+
+// --- Mutations ---------------------------------------------------------------
+export async function createVolunteer(payload) {
+  const { data, error } = await supabase.from('volunteers').insert(payload).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function createOrganisation(payload) {
+  const { data, error } = await supabase.from('organisations').insert(payload).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function createDeployment(payload) {
+  const { data, error } = await supabase.from('deployments').insert(payload).select().single()
+  if (error) throw error
+  return data
+}
+
+// Generate the two survey tokens at deployment-creation time, so survey links
+// exist even before (or independent of) email delivery. Idempotent.
+export async function createSurveyTokens(deploymentId, endDate, expiresDays = 14) {
+  const expires = new Date(endDate)
+  expires.setDate(expires.getDate() + Number(expiresDays))
+  const expiresAt = expires.toISOString()
+  const rows = ['volunteer', 'org'].map((type) => ({
+    deployment_id: deploymentId,
+    type,
+    expires_at: expiresAt,
+  }))
+  const { error } = await supabase
+    .from('survey_tokens')
+    .upsert(rows, { onConflict: 'deployment_id,type', ignoreDuplicates: true })
+  if (error) throw error
+  const { data } = await supabase
+    .from('survey_tokens')
+    .select('type, token')
+    .eq('deployment_id', deploymentId)
+  const map = {}
+  for (const t of data ?? []) map[t.type] = t.token
+  return map
+}
+
+export async function updateDeploymentStatus(id, status) {
+  const { data, error } = await supabase
+    .from('deployments')
+    .update({ status })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function sendSurveyEmails(deploymentId, expiresDays = 14) {
+  const { data, error } = await supabase.functions.invoke('send-survey-emails', {
+    body: { deployment_id: deploymentId, expires_days: expiresDays },
+  })
+  if (error) throw error
+  return data
+}
+
+// --- Surveys (instrument lifecycle) -----------------------------------------
+
+// Defaults used when the `surveys` table has not been migrated yet, so the
+// Surveys page still works (read-only lifecycle) against the fixed instruments.
+const VIRTUAL_SURVEYS = [
+  {
+    id: 'virtual-volunteer',
+    key: 'volunteer',
+    title: 'Volunteer Self-Report Survey',
+    description:
+      'Completed by volunteers at the end of a deployment to capture their onboarding experience, work experience, satisfaction and open feedback.',
+    status: 'PUBLISHED',
+    scheduled_at: null,
+    published_at: null,
+    closed_at: null,
+    default_expiry_days: 14,
+    updated_at: null,
+    is_builtin: true,
+    definition: {},
+    _virtual: true,
+  },
+  {
+    id: 'virtual-org',
+    key: 'org',
+    title: 'Organisation Feedback Survey',
+    description:
+      "Completed by the partner organisation's supervisor to assess the volunteer's task performance, professionalism and organisational impact.",
+    status: 'PUBLISHED',
+    scheduled_at: null,
+    published_at: null,
+    closed_at: null,
+    default_expiry_days: 14,
+    updated_at: null,
+    is_builtin: true,
+    definition: {},
+    _virtual: true,
+  },
+]
+
+const EMPTY_DEFINITION = { type: 'custom', likertSections: [], overall: { title: 'Overall', sliders: [], radios: [] }, feedback: { title: 'Additional comments', note: 'Optional.', fields: [] } }
+
+// Resolve the question config for a survey: built-ins use the fixed code config;
+// custom surveys use their stored `definition`.
+export function getSurveyConfig(survey) {
+  if (!survey) return VOLUNTEER_SURVEY
+  if (survey.is_builtin || survey.key === 'volunteer' || survey.key === 'org') {
+    return survey.key === 'org' ? ORG_SURVEY : VOLUNTEER_SURVEY
+  }
+  const def = survey.definition && Object.keys(survey.definition).length ? survey.definition : EMPTY_DEFINITION
+  return { ...EMPTY_DEFINITION, ...def, overall: { ...EMPTY_DEFINITION.overall, ...(def.overall || {}) }, feedback: { ...EMPTY_DEFINITION.feedback, ...(def.feedback || {}) } }
+}
+
+function isMissingTableError(error) {
+  if (!error) return false
+  if (error.code === 'PGRST205' || error.code === '42P01') return true
+  return /could not find the table|schema cache/i.test(error.message || '')
+}
+
+function responseTable(key) {
+  return key === 'org' ? 'org_surveys' : 'volunteer_surveys'
+}
+
+async function countResponses(survey) {
+  if (survey.is_builtin) {
+    const table = responseTable(survey.key)
+    const [{ count }, latest] = await Promise.all([
+      supabase.from(table).select('id', { count: 'exact', head: true }),
+      supabase.from(table).select('submitted_at').order('submitted_at', { ascending: false }).limit(1),
+    ])
+    return { responseCount: count ?? 0, lastResponseAt: latest?.data?.[0]?.submitted_at ?? null }
+  }
+  const [{ count }, latest] = await Promise.all([
+    supabase.from('survey_responses').select('id', { count: 'exact', head: true }).eq('survey_id', survey.id),
+    supabase.from('survey_responses').select('submitted_at').eq('survey_id', survey.id).order('submitted_at', { ascending: false }).limit(1),
+  ])
+  return { responseCount: count ?? 0, lastResponseAt: latest?.data?.[0]?.submitted_at ?? null }
+}
+
+// List surveys (built-in + custom) enriched with live response counts and the
+// most recent submission. Falls back to virtual instruments if not migrated.
+export async function fetchSurveys() {
+  let surveys
+  const { data, error } = await supabase.from('surveys').select('*').order('is_builtin', { ascending: false }).order('created_at', { ascending: true })
+  if (error) {
+    // Table not migrated yet -> graceful fallback to the fixed instruments.
+    if (isMissingTableError(error)) {
+      surveys = VIRTUAL_SURVEYS.map((s) => ({ ...s }))
+    } else {
+      throw error
+    }
+  } else if (!data || data.length === 0) {
+    surveys = VIRTUAL_SURVEYS.map((s) => ({ ...s }))
+  } else {
+    surveys = data
+  }
+
+  return Promise.all(
+    surveys.map(async (s) => ({ ...s, ...(await countResponses(s).catch(() => ({ responseCount: 0, lastResponseAt: null }))) }))
+  )
+}
+
+export async function updateSurvey(id, patch) {
+  const next = { ...patch }
+  if (patch.status === 'PUBLISHED') next.published_at = patch.published_at ?? new Date().toISOString()
+  if (patch.status === 'CLOSED') next.closed_at = patch.closed_at ?? new Date().toISOString()
+  if (patch.status && patch.status !== 'SCHEDULED') next.scheduled_at = patch.scheduled_at ?? null
+  const { data, error } = await supabase.from('surveys').update(next).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+function slugify(text) {
+  return (text || 'survey')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'survey'
+}
+
+export async function createSurvey({ title, description, audience, definition, status = 'DRAFT', default_expiry_days = 14 }) {
+  const key = `${slugify(title)}-${Math.random().toString(36).slice(2, 8)}`
+  const insert = {
+    key,
+    title: title?.trim(),
+    description: description?.trim() || null,
+    audience: audience?.trim() || null,
+    definition: definition || EMPTY_DEFINITION,
+    status,
+    is_builtin: false,
+    default_expiry_days: Number(default_expiry_days) || 14,
+  }
+  if (status === 'PUBLISHED') insert.published_at = new Date().toISOString()
+  const { data, error } = await supabase.from('surveys').insert(insert).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteSurvey(id) {
+  const { error } = await supabase.from('surveys').delete().eq('id', id)
+  if (error) throw error
+  return true
+}
+
+// All submitted responses for a survey. Built-ins join deployment context;
+// custom surveys return their JSONB answers flattened for display/export.
+export async function fetchSurveyResponses(survey) {
+  if (survey.is_builtin) {
+    const table = responseTable(survey.key)
+    const { data, error } = await supabase
+      .from(table)
+      .select(
+        `*, deployments:deployment_id (
+           id, role_title, start_date, end_date, status,
+           volunteers ( id, full_name, volunteer_id, email ),
+           organisations ( id, name, sector )
+         )`
+      )
+      .order('submitted_at', { ascending: false })
+    if (error) throw error
+    return (data ?? []).map((r) => {
+      const dep = r.deployments || {}
+      return { ...r, deployment: dep, volunteer: one(dep.volunteers), organisation: one(dep.organisations) }
+    })
+  }
+
+  const { data, error } = await supabase
+    .from('survey_responses')
+    .select('*')
+    .eq('survey_id', survey.id)
+    .order('submitted_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    submitted_at: r.submitted_at,
+    respondent_name: r.respondent_name,
+    respondent_email: r.respondent_email,
+    ...(r.answers || {}),
+    _custom: true,
+  }))
+}
+
+// Next volunteer code suggestion, e.g. AV-2026-003
+export async function nextVolunteerCode() {
+  const year = new Date().getFullYear()
+  const { data } = await supabase
+    .from('volunteers')
+    .select('volunteer_id')
+    .ilike('volunteer_id', `AV-${year}-%`)
+  let max = 0
+  for (const v of data ?? []) {
+    const n = parseInt(v.volunteer_id.split('-')[2], 10)
+    if (!Number.isNaN(n)) max = Math.max(max, n)
+  }
+  return `AV-${year}-${String(max + 1).padStart(3, '0')}`
+}

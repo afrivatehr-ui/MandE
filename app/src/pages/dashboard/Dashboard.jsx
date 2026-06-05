@@ -1,0 +1,188 @@
+import { useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+} from 'recharts'
+import PageHeader from '../../components/PageHeader'
+import KPICard from '../../components/KPICard'
+import VPIBadge from '../../components/VPIBadge'
+import EmptyState from '../../components/EmptyState'
+import Spinner from '../../components/Spinner'
+import { useDeployments } from '../../hooks/useData'
+import {
+  summarise,
+  dimensionAverages,
+  vpiDistribution,
+  actionFlags,
+  recentSubmissions,
+} from '../../utils/analytics'
+import { categoryHex } from '../../utils/category'
+import { formatVpi, formatDateTime } from '../../utils/format'
+
+export default function Dashboard() {
+  const navigate = useNavigate()
+  const { data: deployments, isLoading, error } = useDeployments()
+
+  const derived = useMemo(() => {
+    if (!deployments) return null
+    return {
+      summary: summarise(deployments),
+      dims: dimensionAverages(deployments),
+      distribution: vpiDistribution(deployments),
+      flags: actionFlags(deployments),
+      recent: recentSubmissions(deployments),
+    }
+  }, [deployments])
+
+  if (isLoading) return <Spinner className="py-20" label="Loading dashboard" />
+  if (error) return <ErrorNote error={error} />
+
+  const hasData = deployments.length > 0
+  const { summary, dims, distribution, flags, recent } = derived
+
+  return (
+    <div>
+      <PageHeader title="Dashboard" subtitle="Volunteer performance across the current cycle" />
+
+      {!hasData ? (
+        <EmptyState
+          title="No deployments yet"
+          description="Create your first deployment to start collecting feedback and generating performance scores."
+          cta={
+            <button onClick={() => navigate('/deployments')} className="afri-btn-primary">
+              Go to deployments
+            </button>
+          }
+        />
+      ) : (
+        <div className="flex flex-col gap-6">
+          {/* KPI row */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+            <KPICard label="Total Volunteers" value={summary.totalVolunteers} sub="this cycle" tone="purple" onClick={() => navigate('/volunteers')} />
+            <KPICard label="Average VPI" value={summary.avgVpi == null ? '—' : formatVpi(summary.avgVpi)} sub="org-rated" tone="purple" />
+            <KPICard label="A-Players" value={summary.a} sub="≥ 80%" onClick={() => navigate('/deployments')} />
+            <KPICard label="B-Players" value={summary.b} sub="60–79%" onClick={() => navigate('/deployments')} />
+            <KPICard label="C-Players" value={summary.c} sub="< 60%" tone={summary.c > 0 ? 'alert' : 'default'} onClick={() => navigate('/deployments')} />
+            <KPICard label="Partner Orgs" value={summary.activeOrgs} sub="active" onClick={() => navigate('/organisations')} />
+          </div>
+
+          {/* Charts row */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="afri-card p-5">
+              <h2 className="mb-4 font-heading text-h3 text-afri-purple">VPI Score Distribution</h2>
+              {distribution.length ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={distribution} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#000' }} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#000' }} />
+                    <Tooltip formatter={(v) => `${v}%`} cursor={{ fill: '#F0E7F6' }} />
+                    <Bar dataKey="vpi" radius={[6, 6, 0, 0]}>
+                      {distribution.map((entry) => (
+                        <Cell key={entry.name} fill={categoryHex[entry.category]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <NoChartData />
+              )}
+            </div>
+
+            <div className="afri-card p-5">
+              <h2 className="mb-4 font-heading text-h3 text-afri-purple">Programme Dimension Averages</h2>
+              <ResponsiveContainer width="100%" height={280}>
+                <RadarChart data={dims} outerRadius={100}>
+                  <PolarGrid stroke="#E3D4EC" />
+                  <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: '#000' }} />
+                  <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: '#8D4087' }} />
+                  <Radar dataKey="value" stroke="#8D4087" fill="#8D4087" fillOpacity={0.4} />
+                  <Tooltip formatter={(v) => `${v} / 5`} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Bottom row */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="afri-card p-5">
+              <h2 className="mb-4 font-heading text-h3 text-afri-purple">Action Flags — Needs Intervention</h2>
+              {flags.length ? (
+                <ul className="flex flex-col divide-y divide-afri-lavender">
+                  {flags.map((d) => (
+                    <li key={d.id} className="flex items-center justify-between gap-3 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-heading font-medium text-afri-purple">{d.volunteerName}</p>
+                        <p className="truncate font-body text-sm text-afri-black/60">{d.orgName}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className="font-heading text-sm font-semibold text-afri-red">{formatVpi(d.vpi)}</span>
+                        <button onClick={() => navigate(`/volunteers/${d.volunteer_id}`)} className="afri-btn-secondary !px-3 !py-1.5 text-xs">
+                          Schedule Review
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="py-6 text-center font-body text-sm text-afri-black/50">
+                  No volunteers currently need intervention.
+                </p>
+              )}
+            </div>
+
+            <div className="afri-card p-5">
+              <h2 className="mb-4 font-heading text-h3 text-afri-purple">Recent Submissions</h2>
+              {recent.length ? (
+                <ul className="flex flex-col divide-y divide-afri-lavender">
+                  {recent.map((r) => (
+                    <li key={r.id} className="flex items-center justify-between gap-3 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-heading font-medium text-afri-purple">{r.name}</p>
+                        <p className="truncate font-body text-sm text-afri-black/60">
+                          {r.org} · {r.type} survey
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <VPIBadge category={r.category} showLabel={false} />
+                        <span className="font-body text-xs text-afri-black/45">{formatDateTime(r.at)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="py-6 text-center font-body text-sm text-afri-black/50">No submissions yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NoChartData() {
+  return (
+    <div className="flex h-[280px] items-center justify-center font-body text-sm text-afri-black/45">
+      No scored deployments yet.
+    </div>
+  )
+}
+
+export function ErrorNote({ error }) {
+  return (
+    <div className="rounded-card border border-afri-red/30 bg-afri-red/5 p-5 font-body text-sm text-afri-red">
+      Couldn't load data: {error?.message || 'unknown error'}
+    </div>
+  )
+}
