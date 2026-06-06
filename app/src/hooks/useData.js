@@ -10,7 +10,15 @@ import {
 export const useDeployments = () =>
   useQuery({
     queryKey: ['deployments'],
-    queryFn: fetchDeployments,
+    queryFn: () => fetchDeployments({ activeOnly: true }),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
+
+export const useAllDeployments = () =>
+  useQuery({
+    queryKey: ['deployments', 'all'],
+    queryFn: () => fetchDeployments({ activeOnly: false }),
     staleTime: 0,
     refetchOnMount: 'always',
   })

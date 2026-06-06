@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ResponsiveContainer,
   RadarChart,
@@ -14,14 +15,34 @@ import VPIBadge from '../../components/VPIBadge'
 import KPICard from '../../components/KPICard'
 import Spinner from '../../components/Spinner'
 import { ErrorNote } from '../dashboard/Dashboard'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import { useOrganisation } from '../../hooks/useData'
+import { useAuthStore, isWriter } from '../../store/authStore'
+import { archiveOrganisation } from '../../api/data'
+import { toast } from '../../store/toastStore'
 import { dimensionAverages, orgRanking } from '../../utils/analytics'
 import { formatVpi, formatDateRange } from '../../utils/format'
 
 export default function OrganisationDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { profile } = useAuthStore()
+  const canWrite = isWriter(profile?.role)
   const { data, isLoading, error } = useOrganisation(id)
+  const [confirmArchive, setConfirmArchive] = useState(false)
+
+  const archiveMutation = useMutation({
+    mutationFn: () => archiveOrganisation(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organisation', id] })
+      queryClient.invalidateQueries({ queryKey: ['organisations'] })
+      queryClient.invalidateQueries({ queryKey: ['deployments'] })
+      toast.success('Organisation archived. Historical data remains in Reports.')
+      navigate('/organisations')
+    },
+    onError: (e) => toast.error(e.message),
+  })
 
   const derived = useMemo(() => {
     if (!data) return null
@@ -39,12 +60,23 @@ export default function OrganisationDetail() {
 
   const { organisation, deployments } = data
   const { dims, stats, quotes } = derived
+  const isArchived = Boolean(organisation.archived_at)
 
   return (
     <div>
-      <button onClick={() => navigate('/organisations')} className="afri-btn-ghost mb-4 !px-2 text-sm">
-        ← Back to organisations
-      </button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <button onClick={() => navigate('/organisations')} className="afri-btn-ghost !px-2 text-sm">
+          ← Back to organisations
+        </button>
+        {canWrite && !isArchived && (
+          <button onClick={() => setConfirmArchive(true)} className="afri-btn-secondary text-sm text-afri-red">
+            Mark as no longer partnering
+          </button>
+        )}
+        {isArchived && (
+          <span className="rounded-full bg-afri-black/5 px-3 py-1 text-xs text-afri-black/50">Archived — data kept for reports</span>
+        )}
+      </div>
 
       <PageHeader
         title={organisation.name}
@@ -61,14 +93,18 @@ export default function OrganisationDetail() {
       <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="afri-card p-5">
           <h2 className="mb-4 font-heading text-h3 text-afri-purple">Aggregate dimension scores</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <RadarChart data={dims} outerRadius={100}>
-              <PolarGrid stroke="#E3D4EC" />
-              <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: '#000' }} />
-              <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: '#8D4087' }} />
-              <Radar dataKey="value" stroke="#8D4087" fill="#8D4087" fillOpacity={0.4} />
-            </RadarChart>
-          </ResponsiveContainer>
+          {dims?.length ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <RadarChart data={dims} outerRadius={100}>
+                <PolarGrid stroke="#E3D4EC" />
+                <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: '#000' }} />
+                <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: '#8D4087' }} />
+                <Radar dataKey="value" stroke="#8D4087" fill="#8D4087" fillOpacity={0.4} />
+              </RadarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="py-12 text-center text-sm text-afri-black/45">No dimension data yet.</p>
+          )}
         </div>
 
         <div className="afri-card p-5">
@@ -104,6 +140,17 @@ export default function OrganisationDetail() {
           { key: 'vpi', header: 'VPI', align: 'right', render: (r) => <span className="font-semibold text-afri-purple">{formatVpi(r.vpi)}</span> },
           { key: 'category', header: 'Category', align: 'center', render: (r) => <VPIBadge category={r.category} showLabel={false} /> },
         ]}
+      />
+
+      <ConfirmDialog
+        open={confirmArchive}
+        title="Archive this organisation?"
+        message={`${organisation.name} will be removed from active partner lists. All deployment and survey data stays in Reports.`}
+        confirmLabel="Archive organisation"
+        tone="danger"
+        busy={archiveMutation.isPending}
+        onCancel={() => setConfirmArchive(false)}
+        onConfirm={() => archiveMutation.mutate()}
       />
     </div>
   )

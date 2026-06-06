@@ -19,7 +19,7 @@ import KPICard from '../../components/KPICard'
 import VPIBadge from '../../components/VPIBadge'
 import EmptyState from '../../components/EmptyState'
 import Spinner from '../../components/Spinner'
-import { useDeployments } from '../../hooks/useData'
+import { useAllDeployments } from '../../hooks/useData'
 import {
   summarise,
   dimensionAverages,
@@ -32,7 +32,7 @@ import { formatVpi, formatDateTime } from '../../utils/format'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { data: deployments, isLoading, error } = useDeployments()
+  const { data: deployments, isLoading, error } = useAllDeployments()
 
   const derived = useMemo(() => {
     if (!deployments) return null
@@ -49,11 +49,17 @@ export default function Dashboard() {
   if (error) return <ErrorNote error={error} />
 
   const hasData = deployments.length > 0
-  const { summary, dims, distribution, flags, recent } = derived
+  const { summary, dims, distribution, flags, recent } = derived ?? {
+    summary: { totalVolunteers: 0, avgVpi: null, a: 0, b: 0, c: 0, activeOrgs: 0, scoredCount: 0 },
+    dims: null,
+    distribution: [],
+    flags: [],
+    recent: [],
+  }
 
   return (
     <div>
-      <PageHeader title="Dashboard" subtitle="Volunteer performance across the current cycle" />
+      <PageHeader title="Dashboard" subtitle={`Programme overview · ${summary?.scoredCount ?? 0} scored deployment${summary?.scoredCount === 1 ? '' : 's'}`} />
 
       {!hasData ? (
         <EmptyState
@@ -70,7 +76,7 @@ export default function Dashboard() {
           {/* KPI row */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
             <KPICard label="Total Volunteers" value={summary.totalVolunteers} sub="this cycle" tone="purple" onClick={() => navigate('/volunteers')} />
-            <KPICard label="Average VPI" value={summary.avgVpi == null ? '—' : formatVpi(summary.avgVpi)} sub="org-rated" tone="purple" />
+            <KPICard label="Average VPI" value={summary.avgVpi == null ? '—' : formatVpi(summary.avgVpi)} sub="scored deployments" tone="purple" />
             <KPICard label="A-Players" value={summary.a} sub="≥ 80%" onClick={() => navigate('/deployments')} />
             <KPICard label="B-Players" value={summary.b} sub="60–79%" onClick={() => navigate('/deployments')} />
             <KPICard label="C-Players" value={summary.c} sub="< 60%" tone={summary.c > 0 ? 'alert' : 'default'} onClick={() => navigate('/deployments')} />
@@ -101,15 +107,19 @@ export default function Dashboard() {
 
             <div className="afri-card p-5">
               <h2 className="mb-4 font-heading text-h3 text-afri-purple">Programme Dimension Averages</h2>
-              <ResponsiveContainer width="100%" height={280}>
-                <RadarChart data={dims} outerRadius={100}>
-                  <PolarGrid stroke="#E3D4EC" />
-                  <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: '#000' }} />
-                  <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: '#8D4087' }} />
-                  <Radar dataKey="value" stroke="#8D4087" fill="#8D4087" fillOpacity={0.4} />
-                  <Tooltip formatter={(v) => `${v} / 5`} />
-                </RadarChart>
-              </ResponsiveContainer>
+              {dims?.length ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <RadarChart data={dims} outerRadius={100}>
+                    <PolarGrid stroke="#E3D4EC" />
+                    <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: '#000' }} />
+                    <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: '#8D4087' }} />
+                    <Radar dataKey="value" stroke="#8D4087" fill="#8D4087" fillOpacity={0.4} />
+                    <Tooltip formatter={(v) => `${v} / 5`} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              ) : (
+                <NoChartData label="No dimension data yet — complete surveys to populate this chart." />
+              )}
             </div>
           </div>
 
@@ -154,7 +164,10 @@ export default function Dashboard() {
                         </p>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1">
-                        <VPIBadge category={r.category} showLabel={false} />
+                        <VPIBadge category={r.scored ? r.category : null} showLabel={false} />
+                        {!r.scored && (
+                          <span className="font-body text-[10px] text-afri-black/40">Pending VPI</span>
+                        )}
                         <span className="font-body text-xs text-afri-black/45">{formatDateTime(r.at)}</span>
                       </div>
                     </li>
@@ -171,10 +184,10 @@ export default function Dashboard() {
   )
 }
 
-function NoChartData() {
+function NoChartData({ label = 'No scored deployments yet.' }) {
   return (
-    <div className="flex h-[280px] items-center justify-center font-body text-sm text-afri-black/45">
-      No scored deployments yet.
+    <div className="flex h-[280px] items-center justify-center px-4 text-center font-body text-sm text-afri-black/45">
+      {label}
     </div>
   )
 }

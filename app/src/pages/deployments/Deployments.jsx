@@ -20,6 +20,7 @@ import {
   createSurveyTokens,
   sendSurveyEmails,
   updateDeploymentStatus,
+  archiveDeployment,
   nextVolunteerCode,
 } from '../../api/data'
 import { formatDateRange, formatVpi, STATUS_LABEL } from '../../utils/format'
@@ -66,6 +67,7 @@ export default function Deployments() {
   const [filter, setFilter] = useState('ALL')
   const [showCreate, setShowCreate] = useState(false)
   const [confirmComplete, setConfirmComplete] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
 
   const rows = useMemo(() => {
     if (!deployments) return []
@@ -92,6 +94,17 @@ export default function Deployments() {
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
       toast.success('Deployment marked complete.')
       setConfirmComplete(null)
+    },
+    onError: (e) => toast.error(e.message),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => archiveDeployment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deployments'] })
+      queryClient.invalidateQueries({ queryKey: ['deployments', 'all'] })
+      toast.success('Deployment removed. Historical data remains in Reports.')
+      setConfirmDelete(null)
     },
     onError: (e) => toast.error(e.message),
   })
@@ -127,8 +140,8 @@ export default function Deployments() {
       <SurveyStatus
         volDone={r.volSubmitted}
         orgDone={r.orgSubmitted}
-        volNa={!r.hasVolunteer}
-        orgNa={!r.hasOrganisation}
+        volNa={!r.needsVolunteerSurvey}
+        orgNa={!r.needsOrganisationSurvey}
       />
     ) },
     { key: 'vpi', header: 'VPI', align: 'right', render: (r) => <span className="font-semibold text-afri-purple">{formatVpi(r.vpi)}</span> },
@@ -170,6 +183,9 @@ export default function Deployments() {
                   Complete
                 </IconAction>
               )}
+              <IconAction label="Remove deployment" onClick={() => setConfirmDelete(r)}>
+                Remove
+              </IconAction>
             </>
           )}
         </div>
@@ -228,6 +244,17 @@ export default function Deployments() {
         busy={completeMutation.isPending}
         onCancel={() => setConfirmComplete(null)}
         onConfirm={() => completeMutation.mutate(confirmComplete.id)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="Remove deployment?"
+        message={`This removes ${confirmDelete?.volunteerName}'s deployment at ${confirmDelete?.orgName} from active lists. Survey data and VPI scores remain available in Reports.`}
+        confirmLabel="Remove deployment"
+        tone="danger"
+        busy={deleteMutation.isPending}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => deleteMutation.mutate(confirmDelete.id)}
       />
     </div>
   )
@@ -327,6 +354,7 @@ function CreateDeploymentModal({ onClose }) {
         role_title: form.role_title,
         start_date: form.start_date,
         end_date: form.end_date,
+        survey_target: surveyTarget,
       })
       await createSurveyTokens(deployment.id, form.end_date, expiryDays, surveyTypes)
       await updateDeploymentStatus(deployment.id, 'AWAITING_SURVEYS')
@@ -345,6 +373,7 @@ function CreateDeploymentModal({ onClose }) {
     },
     onSuccess: ({ emailNote }) => {
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
+      queryClient.invalidateQueries({ queryKey: ['deployments', 'all'] })
       queryClient.invalidateQueries({ queryKey: ['volunteers'] })
       queryClient.invalidateQueries({ queryKey: ['organisations'] })
       const failed = /No emails were sent|could not be sent/i.test(emailNote)

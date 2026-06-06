@@ -73,7 +73,14 @@ export default function VolunteersList() {
       key: 'surveys',
       header: 'Surveys',
       align: 'center',
-      render: (r) => <SurveyStatus volDone={r.volSubmitted} orgDone={r.orgSubmitted} />,
+      render: (r) => (
+        <SurveyStatus
+          volDone={r.volSubmitted}
+          orgDone={r.orgSubmitted}
+          volNa={!r.needsVolunteerSurvey}
+          orgNa={!r.needsOrganisationSurvey}
+        />
+      ),
     },
     {
       key: 'view',

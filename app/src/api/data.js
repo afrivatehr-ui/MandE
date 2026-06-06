@@ -9,10 +9,10 @@ function one(rel) {
 }
 
 const DEPLOYMENT_SELECT = `
-  id, role_title, start_date, end_date, status, vpi_score, vpi_category, action_flag, created_at, updated_at,
+  id, role_title, start_date, end_date, status, vpi_score, vpi_category, action_flag, survey_target, archived_at, created_at, updated_at,
   volunteer_id, organisation_id,
-  volunteers ( id, volunteer_id, full_name, email ),
-  organisations ( id, name, sector ),
+  volunteers ( id, volunteer_id, full_name, email, archived_at ),
+  organisations ( id, name, sector, archived_at ),
   survey_tokens ( type, token, used, expires_at ),
   volunteer_surveys ( id, submitted_at, volunteer_vpi, onboarding_avg, work_exp_avg, org_env_avg,
     s5_overall_satisfaction, s5_nps_score, s5_volunteer_again ),
@@ -35,6 +35,16 @@ function isSurveyRow(row) {
   return Boolean(row && typeof row === 'object' && row.id)
 }
 
+function inferSurveyTarget(surveyTarget, tokens) {
+  if (surveyTarget) return surveyTarget
+  const hasV = Boolean(tokens.volunteer)
+  const hasO = Boolean(tokens.org)
+  if (hasV && hasO) return 'both'
+  if (hasV) return 'volunteer'
+  if (hasO) return 'organisation'
+  return 'both'
+}
+
 function normaliseDeployment(d, volSurveyOverride, orgSurveyOverride) {
   const vol = one(d.volunteers)
   const org = one(d.organisations)
@@ -47,14 +57,22 @@ function normaliseDeployment(d, volSurveyOverride, orgSurveyOverride) {
     tokens[t.type] = t.token
     tokenUsed[t.type] = Boolean(t.used)
   }
+  const surveyTarget = inferSurveyTarget(d.survey_target, tokens)
+  const needsVolunteerSurvey = surveyTarget === 'volunteer' || surveyTarget === 'both'
+  const needsOrganisationSurvey = surveyTarget === 'organisation' || surveyTarget === 'both'
   const hasVolunteer = Boolean(d.volunteer_id)
   const hasOrganisation = Boolean(d.organisation_id)
   return {
     ...d,
     tokens,
     tokenUsed,
+    surveyTarget,
+    needsVolunteerSurvey,
+    needsOrganisationSurvey,
     volunteer: vol,
     organisation: org,
+    volunteerArchived: Boolean(vol?.archived_at),
+    organisationArchived: Boolean(org?.archived_at),
     volSurvey: isSurveyRow(volSurvey) ? volSurvey : null,
     orgSurvey: isSurveyRow(orgSurvey) ? orgSurvey : null,
     hasVolunteer,
@@ -62,8 +80,8 @@ function normaliseDeployment(d, volSurveyOverride, orgSurveyOverride) {
     volunteerName: vol?.full_name ?? '—',
     volunteerCode: vol?.volunteer_id ?? '—',
     orgName: org?.name ?? '—',
-    volSubmitted: isSurveyRow(volSurvey) || (hasVolunteer && tokenUsed.volunteer),
-    orgSubmitted: isSurveyRow(orgSurvey) || (hasOrganisation && tokenUsed.org),
+    volSubmitted: isSurveyRow(volSurvey) || (needsVolunteerSurvey && tokenUsed.volunteer),
+    orgSubmitted: isSurveyRow(orgSurvey) || (needsOrganisationSurvey && tokenUsed.org),
     task: orgSurvey?.task_perf_avg ?? null,
     prof: orgSurvey?.professionalism_avg ?? null,
     impact: orgSurvey?.impact_avg ?? null,
@@ -86,11 +104,13 @@ async function loadSurveyRowsByDeployment(ids) {
   return { volByDep, orgByDep }
 }
 
-export async function fetchDeployments() {
-  const { data, error } = await supabase
+export async function fetchDeployments({ activeOnly = true } = {}) {
+  let query = supabase
     .from('deployments')
     .select(DEPLOYMENT_SELECT)
     .order('created_at', { ascending: false })
+  if (activeOnly) query = query.is('archived_at', null)
+  const { data, error } = await query
   if (error) throw error
   if (!data?.length) return []
   const ids = data.map((d) => d.id)
@@ -101,13 +121,21 @@ export async function fetchDeployments() {
 }
 
 export async function fetchVolunteers() {
-  const { data, error } = await supabase.from('volunteers').select('*').order('full_name')
+  const { data, error } = await supabase
+    .from('volunteers')
+    .select('*')
+    .is('archived_at', null)
+    .order('full_name')
   if (error) throw error
   return data
 }
 
 export async function fetchOrganisations() {
-  const { data, error } = await supabase.from('organisations').select('*').order('name')
+  const { data, error } = await supabase
+    .from('organisations')
+    .select('*')
+    .is('archived_at', null)
+    .order('name')
   if (error) throw error
   return data
 }
@@ -183,6 +211,39 @@ export async function updateDeploymentStatus(id, status) {
   const { data, error } = await supabase
     .from('deployments')
     .update({ status })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function archiveDeployment(id) {
+  const { data, error } = await supabase
+    .from('deployments')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function archiveVolunteer(id) {
+  const { data, error } = await supabase
+    .from('volunteers')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function archiveOrganisation(id) {
+  const { data, error } = await supabase
+    .from('organisations')
+    .update({ archived_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single()

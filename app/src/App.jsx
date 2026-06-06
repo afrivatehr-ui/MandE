@@ -23,6 +23,7 @@ import Surveys from './pages/surveys/Surveys'
 import VolunteerSurvey from './pages/surveys/VolunteerSurvey'
 import OrgSurvey from './pages/surveys/OrgSurvey'
 import CustomSurvey from './pages/surveys/CustomSurvey'
+import HomeRedirect from './components/HomeRedirect'
 import NotFound from './pages/NotFound'
 
 
@@ -78,7 +79,7 @@ export default function App() {
           />
         </Route>
 
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<HomeRedirect />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </>

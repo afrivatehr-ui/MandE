@@ -11,3 +11,9 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Legacy logo path used in older LOGO_URL secrets
+[[redirects]]
+  from = "/afrivate-logo.svg"
+  to = "/logos/afrivate-full-logo-purple.png"
+  status = 200

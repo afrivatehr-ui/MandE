@@ -6,15 +6,21 @@ import VPIBadge from '../../components/VPIBadge'
 import EmptyState from '../../components/EmptyState'
 import Spinner from '../../components/Spinner'
 import { ErrorNote } from '../dashboard/Dashboard'
-import { useDeployments } from '../../hooks/useData'
+import { useAllDeployments } from '../../hooks/useData'
 import { orgRanking } from '../../utils/analytics'
 import { formatVpi } from '../../utils/format'
 
 export default function OrganisationsList() {
   const navigate = useNavigate()
-  const { data: deployments, isLoading, error } = useDeployments()
+  const { data: deployments, isLoading, error } = useAllDeployments()
 
-  const rows = useMemo(() => (deployments ? orgRanking(deployments) : []), [deployments])
+  const rows = useMemo(() => {
+    if (!deployments) return []
+    return orgRanking(deployments).filter((o) => {
+      const first = o.deployments[0]
+      return !first?.organisationArchived
+    })
+  }, [deployments])
 
   if (isLoading) return <Spinner className="py-20" label="Loading organisations" />
   if (error) return <ErrorNote error={error} />

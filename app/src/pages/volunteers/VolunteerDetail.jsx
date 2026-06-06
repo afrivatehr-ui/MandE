@@ -1,13 +1,18 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import VPIRing from '../../components/VPIRing'
 import VPIBadge from '../../components/VPIBadge'
 import ActionFlag from '../../components/ActionFlag'
 import DataTable from '../../components/DataTable'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import Spinner from '../../components/Spinner'
 import SurveyAnswers from '../../components/survey/SurveyAnswers'
 import { ErrorNote } from '../dashboard/Dashboard'
 import { useVolunteer } from '../../hooks/useData'
+import { useAuthStore, isWriter } from '../../store/authStore'
+import { archiveVolunteer } from '../../api/data'
+import { toast } from '../../store/toastStore'
 import { getActionDescription } from '../../utils/vpiEngine'
 import { initials, formatDateRange, formatVpi } from '../../utils/format'
 import { VOLUNTEER_SURVEY, ORG_SURVEY } from '../../config/surveyQuestions'
@@ -15,19 +20,46 @@ import { VOLUNTEER_SURVEY, ORG_SURVEY } from '../../config/surveyQuestions'
 export default function VolunteerDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { profile } = useAuthStore()
+  const canWrite = isWriter(profile?.role)
   const { data, isLoading, error } = useVolunteer(id)
+  const [confirmArchive, setConfirmArchive] = useState(false)
+
+  const archiveMutation = useMutation({
+    mutationFn: () => archiveVolunteer(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['volunteer', id] })
+      queryClient.invalidateQueries({ queryKey: ['volunteers'] })
+      queryClient.invalidateQueries({ queryKey: ['deployments'] })
+      toast.success('Volunteer archived. Deployment history remains in Reports.')
+      navigate('/volunteers')
+    },
+    onError: (e) => toast.error(e.message),
+  })
 
   if (isLoading) return <Spinner className="py-20" label="Loading profile" />
   if (error) return <ErrorNote error={error} />
 
   const { volunteer, deployments } = data
   const latest = deployments.find((d) => d.vpi != null) || deployments[0] || null
+  const isArchived = Boolean(volunteer.archived_at)
 
   return (
     <div>
-      <button onClick={() => navigate('/volunteers')} className="afri-btn-ghost mb-4 !px-2 text-sm">
-        ← Back to volunteers
-      </button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <button onClick={() => navigate('/volunteers')} className="afri-btn-ghost !px-2 text-sm">
+          ← Back to volunteers
+        </button>
+        {canWrite && !isArchived && (
+          <button onClick={() => setConfirmArchive(true)} className="afri-btn-secondary text-sm text-afri-red">
+            Mark as no longer with us
+          </button>
+        )}
+        {isArchived && (
+          <span className="rounded-full bg-afri-black/5 px-3 py-1 text-xs text-afri-black/50">Archived — data kept for reports</span>
+        )}
+      </div>
 
       {/* Header */}
       <div className="afri-card mb-6 flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -102,6 +134,17 @@ export default function VolunteerDetail() {
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={confirmArchive}
+        title="Archive this volunteer?"
+        message={`${volunteer.full_name} will be removed from active lists. All deployment and survey data stays in Reports.`}
+        confirmLabel="Archive volunteer"
+        tone="danger"
+        busy={archiveMutation.isPending}
+        onCancel={() => setConfirmArchive(false)}
+        onConfirm={() => archiveMutation.mutate()}
+      />
     </div>
   )
 }
