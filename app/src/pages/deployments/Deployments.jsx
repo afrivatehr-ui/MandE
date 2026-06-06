@@ -123,27 +123,33 @@ export default function Deployments() {
   if (error) return <ErrorNote error={error} />
 
   const columns = [
-    { key: 'volunteerName', header: 'Volunteer', sortable: true, render: (r) => (
-      <div>
-        <p className="font-medium text-afri-purple">{r.volunteerName}</p>
-        <p className="text-xs text-afri-black/50">{r.volunteerCode}</p>
-      </div>
-    ) },
+    {
+      key: 'volunteerName', header: 'Volunteer', sortable: true, render: (r) => (
+        <div>
+          <p className="font-medium text-afri-purple">{r.volunteerName}</p>
+          <p className="text-xs text-afri-black/50">{r.volunteerCode}</p>
+        </div>
+      )
+    },
     { key: 'orgName', header: 'Organisation', sortable: true },
     { key: 'period', header: 'Period', render: (r) => <span className="text-xs">{formatDateRange(r.start_date, r.end_date)}</span> },
-    { key: 'status', header: 'Status', render: (r) => (
-      <span className="rounded-full bg-afri-lavender px-2.5 py-1 font-body text-xs text-afri-purple">
-        {STATUS_LABEL[r.status]}
-      </span>
-    ) },
-    { key: 'surveys', header: 'Surveys', align: 'center', render: (r) => (
-      <SurveyStatus
-        volDone={r.volSubmitted}
-        orgDone={r.orgSubmitted}
-        volNa={!r.needsVolunteerSurvey}
-        orgNa={!r.needsOrganisationSurvey}
-      />
-    ) },
+    {
+      key: 'status', header: 'Status', render: (r) => (
+        <span className="rounded-full bg-afri-lavender px-2.5 py-1 font-body text-xs text-afri-purple">
+          {STATUS_LABEL[r.status]}
+        </span>
+      )
+    },
+    {
+      key: 'surveys', header: 'Surveys', align: 'center', render: (r) => (
+        <SurveyStatus
+          volDone={r.volSubmitted}
+          orgDone={r.orgSubmitted}
+          volNa={!r.needsVolunteerSurvey}
+          orgNa={!r.needsOrganisationSurvey}
+        />
+      )
+    },
     { key: 'vpi', header: 'VPI', align: 'right', render: (r) => <span className="font-semibold text-afri-purple">{formatVpi(r.vpi)}</span> },
     { key: 'category', header: 'Cat.', align: 'center', render: (r) => <VPIBadge category={r.category} showLabel={false} /> },
     {
@@ -151,7 +157,7 @@ export default function Deployments() {
       header: '',
       align: 'right',
       render: (r) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <IconAction label="View volunteer" onClick={() => navigate(`/volunteers/${r.volunteer_id}`)}>
             View
           </IconAction>
@@ -160,22 +166,18 @@ export default function Deployments() {
           </IconAction>
           {canWrite && (
             <>
-              {r.hasVolunteer && (
+              {(r.hasVolunteer || r.hasOrganisation) && (
                 <IconAction
-                  label="Email volunteer survey"
-                  onClick={() => resendMutation.mutate({ id: r.id, types: ['volunteer'] })}
+                  label="Send survey email(s)"
+                  onClick={() => {
+                    const types = []
+                    if (r.hasVolunteer) types.push('volunteer')
+                    if (r.hasOrganisation) types.push('org')
+                    resendMutation.mutate({ id: r.id, types })
+                  }}
                   busy={resendMutation.isPending}
                 >
-                  Email V
-                </IconAction>
-              )}
-              {r.hasOrganisation && (
-                <IconAction
-                  label="Email organisation survey"
-                  onClick={() => resendMutation.mutate({ id: r.id, types: ['org'] })}
-                  busy={resendMutation.isPending}
-                >
-                  Email O
+                  Send email(s)
                 </IconAction>
               )}
               {r.status !== 'COMPLETED' && (
@@ -212,9 +214,8 @@ export default function Deployments() {
           <button
             key={f.id}
             onClick={() => setFilter(f.id)}
-            className={`rounded-lg px-3 py-1.5 font-body text-sm transition-colors ${
-              filter === f.id ? 'bg-afri-purple text-afri-white' : 'bg-afri-lavender text-afri-purple hover:bg-afri-lavender/70'
-            }`}
+            className={`rounded-lg px-3 py-1.5 font-body text-sm transition-colors ${filter === f.id ? 'bg-afri-purple text-afri-white' : 'bg-afri-lavender text-afri-purple hover:bg-afri-lavender/70'
+              }`}
           >
             {f.label}
           </button>
@@ -419,9 +420,8 @@ function CreateDeploymentModal({ onClose }) {
               {SURVEY_TARGETS.map((t) => (
                 <label
                   key={t.id}
-                  className={`flex cursor-pointer gap-3 rounded-lg border px-4 py-3 transition-colors ${
-                    surveyTarget === t.id ? 'border-afri-purple bg-afri-lavender/50' : 'border-afri-lavender hover:bg-afri-lavender/30'
-                  }`}
+                  className={`flex cursor-pointer gap-3 rounded-lg border px-4 py-3 transition-colors ${surveyTarget === t.id ? 'border-afri-purple bg-afri-lavender/50' : 'border-afri-lavender hover:bg-afri-lavender/30'
+                    }`}
                 >
                   <input
                     type="radio"

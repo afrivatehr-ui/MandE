@@ -125,16 +125,20 @@ export default function OrganisationDetail() {
 
       <h2 className="mb-3 font-heading text-h3 text-afri-purple">Volunteers deployed here</h2>
       <DataTable
-        rows={deployments}
+        rows={(deployments ?? []).filter((d) => !d.volunteerArchived)}
         rowKey={(r) => r.id}
         onRowClick={(r) => navigate(`/volunteers/${r.volunteer_id}`)}
         columns={[
-          { key: 'volunteerName', header: 'Volunteer', render: (r) => (
-            <div>
-              <p className="font-medium text-afri-purple">{r.volunteerName}</p>
-              <p className="text-xs text-afri-black/50">{r.volunteerCode}</p>
-            </div>
-          ) },
+          {
+            key: 'volunteerName',
+            header: 'Volunteer',
+            render: (r) => (
+              <div>
+                <p className="font-medium text-afri-purple">{r.volunteerName}</p>
+                <p className="text-xs text-afri-black/50">{r.volunteerCode}</p>
+              </div>
+            ),
+          },
           { key: 'role_title', header: 'Role' },
           { key: 'period', header: 'Period', render: (r) => <span className="text-xs">{formatDateRange(r.start_date, r.end_date)}</span> },
           { key: 'vpi', header: 'VPI', align: 'right', render: (r) => <span className="font-semibold text-afri-purple">{formatVpi(r.vpi)}</span> },
