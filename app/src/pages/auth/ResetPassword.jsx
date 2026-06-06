@@ -70,7 +70,7 @@ export default function ResetPassword() {
       <AuthCard subtitle="">
         <div className="flex flex-col items-center gap-4 py-6">
           <Spinner label="Verifying reset link" />
-          <p className="text-center text-sm text-afri-gray-600">
+          <p className="text-center text-sm afri-muted">
             Link expired?{' '}
             <Link to="/forgot-password" className="font-semibold text-afri-purple hover:underline">
               Request a new one
@@ -84,7 +84,7 @@ export default function ResetPassword() {
   return (
     <AuthCard>
       <h1 className="font-heading text-h2 text-afri-purple">Choose a new password</h1>
-      <p className="mt-2 text-sm text-afri-gray-600">Enter and confirm your new password below.</p>
+      <p className="mt-2 text-sm afri-muted">Enter and confirm your new password below.</p>
 
       <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4">
         {error && (

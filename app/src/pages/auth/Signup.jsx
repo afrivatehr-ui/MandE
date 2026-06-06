@@ -75,7 +75,7 @@ export default function Signup() {
         return (
             <AuthCard subtitle="">
                 <h1 className="font-heading text-h2 text-afri-purple">Request submitted</h1>
-                <p className="mt-3 text-afri-gray-600">
+                <p className="mt-3 afri-muted">
                     Your account has been created. Check your email to confirm your address, then an
                     admin will review your access request.
                 </p>
@@ -179,7 +179,7 @@ export default function Signup() {
                     {submitting ? <Spinner /> : 'Request access'}
                 </button>
 
-                <p className="text-center text-sm text-afri-gray-600">
+                <p className="text-center text-sm afri-muted">
                     Already have an account?{' '}
                     <Link to="/login" className="font-semibold text-afri-purple hover:underline">
                         Sign in

@@ -13,18 +13,18 @@ export default function ConfigError() {
         </div>
         <div className="flex flex-col gap-4 p-8">
           <h1 className="font-heading text-h2 text-afri-purple">Configuration required</h1>
-          <p className="font-body text-sm text-afri-gray-700">
+          <p className="afri-muted font-body text-sm">
             This deployment was built without Supabase credentials. The app cannot connect to
             the database until environment variables are set and the site is rebuilt.
           </p>
-          <div className="rounded-lg border border-afri-purple/20 bg-afri-lavender/50 px-4 py-3 text-sm text-afri-gray-800">
+          <div className="rounded-lg border border-afri-purple/20 bg-afri-lavender/50 px-4 py-3 text-sm dark:border-afri-purple-light/30 dark:bg-afri-purple-surface">
             <p className="mb-2 font-semibold text-afri-purple">Netlify → Site settings → Environment variables</p>
             <ul className="list-inside list-disc space-y-1 font-mono text-xs">
               <li>VITE_SUPABASE_URL</li>
               <li>VITE_SUPABASE_ANON_KEY</li>
             </ul>
           </div>
-          <p className="text-sm text-afri-gray-600">
+          <p className="afri-muted text-sm">
             After saving the variables, trigger a new deploy (Deploys → Trigger deploy → Deploy
             site). Vite bakes these values into the bundle at build time — a redeploy is required.
           </p>

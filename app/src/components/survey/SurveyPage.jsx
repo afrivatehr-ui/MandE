@@ -63,7 +63,7 @@ export default function SurveyPage() {
 
 function SurveyShell({ children }) {
   return (
-    <div className="flex min-h-screen flex-col bg-afri-lavender/50">
+    <div className="flex min-h-screen flex-col bg-afri-lavender/50 dark:bg-afri-purple-deep">
       <header className="bg-afri-purple px-5 py-4 sm:px-8">
         <Logo variant="white" className="h-8" />
       </header>
@@ -77,8 +77,8 @@ function SurveyMessage({ title, body }) {
     <SurveyShell>
       <div className="afri-card max-w-md p-7 text-center">
         <h1 className="font-heading text-h2 text-afri-purple">{title}</h1>
-        {body && <p className="mt-3 font-body text-afri-black/70">{body}</p>}
-        <p className="mt-5 font-body text-sm text-afri-black/50">
+        {body && <p className="afri-muted mt-3 font-body">{body}</p>}
+        <p className="afri-subtle mt-5 font-body text-sm">
           If you believe this is a mistake, please contact the Afrivate M&amp;E team.
         </p>
       </div>
@@ -110,18 +110,18 @@ function Confirmation({ context, type, answers }) {
           </svg>
         </div>
         <h1 className="font-heading text-h2 text-afri-purple">Thank you{name ? `, ${name}` : ''}.</h1>
-        <p className="mt-2 font-body text-afri-black/70">Your response has been recorded.</p>
+        <p className="afri-muted mt-2 font-body">Your response has been recorded.</p>
 
-        <dl className="mt-6 divide-y divide-afri-lavender rounded-lg bg-afri-lavender/40 px-4 text-left">
+        <dl className="mt-6 divide-y divide-afri-lavender rounded-lg bg-afri-lavender/40 px-4 text-left dark:divide-afri-purple-light/20 dark:bg-afri-purple-surface/60">
           {recap.map(([label, value]) => (
             <div key={label} className="flex items-center justify-between gap-4 py-3">
-              <dt className="font-body text-sm text-afri-black/60">{label}</dt>
-              <dd className="font-heading text-sm font-medium text-afri-purple">{value}</dd>
+              <dt className="afri-muted font-body text-sm">{label}</dt>
+              <dd className="font-heading text-sm font-medium">{value}</dd>
             </div>
           ))}
         </dl>
 
-        <p className="mt-6 font-body text-sm text-afri-black/50">
+        <p className="afri-subtle mt-6 font-body text-sm">
           You can now close this window. Your feedback helps Afrivate support future volunteers.
         </p>
       </div>

@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
@@ -9,6 +10,11 @@ export default {
           lavender: '#F0E7F6',
           black: '#000000',
           white: '#FFFFFF',
+          // Dark theme surfaces (purple-based)
+          'purple-deep': '#1a0f1a',
+          'purple-surface': '#2a1830',
+          'purple-elevated': '#3d2545',
+          'purple-light': '#5c3a5a',
           // Extended palette - promotional / status only, never UI chrome
           green: '#317D34',
           blue: '#1D45CF',

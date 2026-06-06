@@ -8,6 +8,7 @@ import SurveyStatus from '../../components/SurveyStatus'
 import EmptyState from '../../components/EmptyState'
 import Spinner from '../../components/Spinner'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import DeploymentActions from '../../components/DeploymentActions'
 import { ErrorNote } from '../dashboard/Dashboard'
 import { useDeployments, useVolunteers, useOrganisations } from '../../hooks/useData'
 import { useAuthStore, isWriter } from '../../store/authStore'
@@ -135,7 +136,7 @@ export default function Deployments() {
     { key: 'period', header: 'Period', render: (r) => <span className="text-xs">{formatDateRange(r.start_date, r.end_date)}</span> },
     {
       key: 'status', header: 'Status', render: (r) => (
-        <span className="rounded-full bg-afri-lavender px-2.5 py-1 font-body text-xs text-afri-purple">
+        <span className="rounded-full bg-afri-lavender px-2.5 py-1 font-body text-xs text-afri-purple dark:bg-afri-purple-light/30 dark:text-afri-lavender">
           {STATUS_LABEL[r.status]}
         </span>
       )
@@ -154,43 +155,19 @@ export default function Deployments() {
     { key: 'category', header: 'Cat.', align: 'center', render: (r) => <VPIBadge category={r.category} showLabel={false} /> },
     {
       key: 'actions',
-      header: '',
+      header: 'Actions',
       align: 'right',
       render: (r) => (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <IconAction label="View volunteer" onClick={() => navigate(`/volunteers/${r.volunteer_id}`)}>
-            View
-          </IconAction>
-          <IconAction label="Copy survey links" onClick={() => copyLinks(r)}>
-            Links
-          </IconAction>
-          {canWrite && (
-            <>
-              {(r.hasVolunteer || r.hasOrganisation) && (
-                <IconAction
-                  label="Send survey email(s)"
-                  onClick={() => {
-                    const types = []
-                    if (r.hasVolunteer) types.push('volunteer')
-                    if (r.hasOrganisation) types.push('org')
-                    resendMutation.mutate({ id: r.id, types })
-                  }}
-                  busy={resendMutation.isPending}
-                >
-                  Send email(s)
-                </IconAction>
-              )}
-              {r.status !== 'COMPLETED' && (
-                <IconAction label="Mark complete" onClick={() => setConfirmComplete(r)}>
-                  Complete
-                </IconAction>
-              )}
-              <IconAction label="Remove deployment" onClick={() => setConfirmDelete(r)}>
-                Remove
-              </IconAction>
-            </>
-          )}
-        </div>
+        <DeploymentActions
+          row={r}
+          canWrite={canWrite}
+          emailBusy={resendMutation.isPending}
+          onView={() => navigate(`/volunteers/${r.volunteer_id}`)}
+          onCopyLinks={() => copyLinks(r)}
+          onSendEmail={(types) => resendMutation.mutate({ id: r.id, types })}
+          onComplete={() => setConfirmComplete(r)}
+          onRemove={() => setConfirmDelete(r)}
+        />
       ),
     },
   ]
@@ -214,8 +191,11 @@ export default function Deployments() {
           <button
             key={f.id}
             onClick={() => setFilter(f.id)}
-            className={`rounded-lg px-3 py-1.5 font-body text-sm transition-colors ${filter === f.id ? 'bg-afri-purple text-afri-white' : 'bg-afri-lavender text-afri-purple hover:bg-afri-lavender/70'
-              }`}
+            className={`rounded-lg px-3 py-1.5 font-body text-sm transition-colors ${
+              filter === f.id
+                ? 'bg-afri-purple text-afri-white dark:bg-afri-lavender dark:text-afri-purple-deep'
+                : 'bg-afri-lavender text-afri-purple hover:bg-afri-lavender/70 dark:bg-afri-purple-surface dark:text-afri-lavender dark:hover:bg-afri-purple-light/30'
+            }`}
           >
             {f.label}
           </button>
@@ -226,6 +206,7 @@ export default function Deployments() {
         columns={columns}
         rows={rows}
         rowKey={(r) => r.id}
+        mobilePrimaryKeys={['volunteerName', 'orgName']}
         emptyState={
           <EmptyState
             title="No deployments"
@@ -258,22 +239,6 @@ export default function Deployments() {
         onConfirm={() => deleteMutation.mutate(confirmDelete.id)}
       />
     </div>
-  )
-}
-
-function IconAction({ children, onClick, label, busy }) {
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick()
-      }}
-      title={label}
-      disabled={busy}
-      className="afri-btn-ghost !px-2.5 !py-1.5 text-xs disabled:opacity-50"
-    >
-      {children}
-    </button>
   )
 }
 
@@ -409,7 +374,7 @@ function CreateDeploymentModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-afri-black/40 p-4" onClick={onClose}>
-      <div className="my-8 w-full max-w-2xl rounded-card bg-afri-white p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
+      <div className="afri-card my-8 w-full max-w-2xl p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
         <h2 className="mb-5 font-heading text-h2 text-afri-purple">New deployment</h2>
 
         <div className="flex flex-col gap-6">

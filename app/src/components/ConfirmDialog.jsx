@@ -16,13 +16,13 @@ export default function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-afri-black/40 p-4" onClick={onCancel}>
       <div
-        className="w-full max-w-md rounded-card bg-afri-white p-6 shadow-card"
+        className="afri-card w-full max-w-md p-6"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
         <h3 className="font-heading text-h3 text-afri-purple">{title}</h3>
-        {message && <p className="mt-2 font-body text-sm text-afri-black/70">{message}</p>}
+        {message && <p className="afri-muted mt-2 font-body text-sm">{message}</p>}
         <div className="mt-6 flex justify-end gap-3">
           <button onClick={onCancel} className="afri-btn-secondary" disabled={busy}>
             {cancelLabel}

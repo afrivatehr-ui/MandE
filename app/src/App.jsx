@@ -29,7 +29,6 @@ import NotFound from './pages/NotFound'
 
 export default function App() {
   const init = useAuthStore((s) => s.init)
-
   useEffect(() => {
     init()
   }, [init])

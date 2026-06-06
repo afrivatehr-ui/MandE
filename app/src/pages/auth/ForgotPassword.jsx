@@ -29,7 +29,7 @@ export default function ForgotPassword() {
     return (
       <AuthCard>
         <h1 className="font-heading text-h2 text-afri-purple">Check your email</h1>
-        <p className="mt-3 text-sm text-afri-gray-600">
+        <p className="mt-3 text-sm afri-muted">
           If an account exists for <strong>{email}</strong>, we sent a password reset link.
           The link expires shortly — check your spam folder if you don&apos;t see it.
         </p>
@@ -43,7 +43,7 @@ export default function ForgotPassword() {
   return (
     <AuthCard>
       <h1 className="font-heading text-h2 text-afri-purple">Forgot password</h1>
-      <p className="mt-2 text-sm text-afri-gray-600">
+      <p className="mt-2 text-sm afri-muted">
         Enter your email and we&apos;ll send you a link to reset your password.
       </p>
 
@@ -72,7 +72,7 @@ export default function ForgotPassword() {
           {submitting ? <Spinner /> : 'Send reset link'}
         </button>
 
-        <p className="text-center text-sm text-afri-gray-600">
+        <p className="text-center text-sm afri-muted">
           Remember your password?{' '}
           <Link to="/login" className="font-semibold text-afri-purple hover:underline">
             Sign in

@@ -104,6 +104,20 @@ async function loadSurveyRowsByDeployment(ids) {
   return { volByDep, orgByDep }
 }
 
+// Full survey rows for detail pages (all Likert / feedback columns).
+async function loadFullSurveyRowsByDeployment(ids) {
+  if (!ids.length) return { volByDep: new Map(), orgByDep: new Map() }
+  const [{ data: volRows, error: volErr }, { data: orgRows, error: orgErr }] = await Promise.all([
+    supabase.from('volunteer_surveys').select('*').in('deployment_id', ids),
+    supabase.from('org_surveys').select('*').in('deployment_id', ids),
+  ])
+  if (volErr) throw volErr
+  if (orgErr) throw orgErr
+  const volByDep = new Map((volRows ?? []).map((r) => [r.deployment_id, r]))
+  const orgByDep = new Map((orgRows ?? []).map((r) => [r.deployment_id, r]))
+  return { volByDep, orgByDep }
+}
+
 export async function fetchDeployments({ activeOnly = true } = {}) {
   let query = supabase
     .from('deployments')
@@ -149,7 +163,14 @@ export async function fetchVolunteer(id) {
     .eq('volunteer_id', id)
     .order('start_date', { ascending: false })
   if (depErr) throw depErr
-  return { volunteer: data, deployments: deps.map(normaliseDeployment) }
+  const ids = (deps ?? []).map((d) => d.id)
+  const { volByDep, orgByDep } = await loadFullSurveyRowsByDeployment(ids)
+  return {
+    volunteer: data,
+    deployments: (deps ?? []).map((d) =>
+      normaliseDeployment(d, volByDep.get(d.id), orgByDep.get(d.id)),
+    ),
+  }
 }
 
 export async function fetchOrganisation(id) {
@@ -161,7 +182,14 @@ export async function fetchOrganisation(id) {
     .eq('organisation_id', id)
     .order('start_date', { ascending: false })
   if (depErr) throw depErr
-  return { organisation: data, deployments: deps.map(normaliseDeployment) }
+  const ids = (deps ?? []).map((d) => d.id)
+  const { volByDep, orgByDep } = await loadFullSurveyRowsByDeployment(ids)
+  return {
+    organisation: data,
+    deployments: (deps ?? []).map((d) =>
+      normaliseDeployment(d, volByDep.get(d.id), orgByDep.get(d.id)),
+    ),
+  }
 }
 
 // --- Mutations ---------------------------------------------------------------

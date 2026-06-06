@@ -52,7 +52,7 @@ export default function Login() {
     return (
       <AuthCard>
         <h1 className="font-heading text-h2 text-afri-purple">Check your email</h1>
-        <p className="mt-3 text-sm text-afri-gray-600">
+        <p className="afri-muted mt-3 text-sm">
           We sent a one-time sign-in link to <strong>{email}</strong>. Click the link in the email to
           access the platform — it expires shortly.
         </p>
@@ -72,7 +72,7 @@ export default function Login() {
           type="button"
           onClick={() => { setMode('password'); setError('') }}
           className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-            mode === 'password' ? 'bg-afri-white text-afri-purple shadow-sm' : 'text-afri-gray-600'
+            mode === 'password' ? 'bg-afri-white text-afri-purple shadow-sm dark:bg-afri-purple-elevated dark:text-afri-lavender' : 'afri-muted'
           }`}
         >
           Password
@@ -81,7 +81,7 @@ export default function Login() {
           type="button"
           onClick={() => { setMode('magic'); setError('') }}
           className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-            mode === 'magic' ? 'bg-afri-white text-afri-purple shadow-sm' : 'text-afri-gray-600'
+            mode === 'magic' ? 'bg-afri-white text-afri-purple shadow-sm dark:bg-afri-purple-elevated dark:text-afri-lavender' : 'afri-muted'
           }`}
         >
           Magic link
@@ -132,7 +132,7 @@ export default function Login() {
         </form>
       ) : (
         <form onSubmit={handleMagicSubmit} className="mt-4 flex flex-col gap-4">
-          <p className="text-sm text-afri-gray-600">
+          <p className="afri-muted text-sm">
             We&apos;ll email you a secure one-time link — no password needed.
           </p>
           <div>
@@ -154,7 +154,7 @@ export default function Login() {
         </form>
       )}
 
-      <p className="mt-4 text-center text-sm text-afri-gray-600">
+      <p className="afri-muted mt-4 text-center text-sm">
         Don&apos;t have an account?{' '}
         <Link to="/signup" className="font-semibold text-afri-purple hover:underline">
           Request access

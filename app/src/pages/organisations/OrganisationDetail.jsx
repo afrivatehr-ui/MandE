@@ -21,6 +21,7 @@ import { useAuthStore, isWriter } from '../../store/authStore'
 import { archiveOrganisation } from '../../api/data'
 import { toast } from '../../store/toastStore'
 import { dimensionAverages, orgRanking } from '../../utils/analytics'
+import { useThemeColors } from '../../hooks/useThemeColors'
 import { formatVpi, formatDateRange } from '../../utils/format'
 
 export default function OrganisationDetail() {
@@ -30,6 +31,7 @@ export default function OrganisationDetail() {
   const { profile } = useAuthStore()
   const canWrite = isWriter(profile?.role)
   const { data, isLoading, error } = useOrganisation(id)
+  const colors = useThemeColors()
   const [confirmArchive, setConfirmArchive] = useState(false)
 
   const archiveMutation = useMutation({
@@ -96,10 +98,10 @@ export default function OrganisationDetail() {
           {dims?.length ? (
             <ResponsiveContainer width="100%" height={280}>
               <RadarChart data={dims} outerRadius={100}>
-                <PolarGrid stroke="#E3D4EC" />
-                <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: '#000' }} />
-                <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: '#8D4087' }} />
-                <Radar dataKey="value" stroke="#8D4087" fill="#8D4087" fillOpacity={0.4} />
+                <PolarGrid stroke={colors.grid} />
+                <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: colors.tick }} />
+                <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: colors.radarStroke }} />
+                <Radar dataKey="value" stroke={colors.radarStroke} fill={colors.radarFill} fillOpacity={0.4} />
               </RadarChart>
             </ResponsiveContainer>
           ) : (

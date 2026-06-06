@@ -4,6 +4,18 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.jsx'
+import { applyTheme } from './store/themeStore'
+
+// Apply persisted theme before first paint to avoid flash
+try {
+  const stored = localStorage.getItem('afrivate-me-theme')
+  if (stored) {
+    const parsed = JSON.parse(stored)
+    if (parsed?.state?.theme) applyTheme(parsed.state.theme)
+  }
+} catch {
+  applyTheme('light')
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

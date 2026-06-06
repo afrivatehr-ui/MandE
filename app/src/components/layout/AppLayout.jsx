@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore, isAdmin, isWriter } from '../../store/authStore'
 import Logo from '../Logo'
+import ThemeToggle from '../ThemeToggle'
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: GridIcon },
@@ -36,38 +37,67 @@ export default function AppLayout() {
     .toUpperCase()
 
   return (
-    <div className="min-h-screen bg-afri-lavender/40 lg:flex">
+    <div className="min-h-screen bg-afri-lavender/40 lg:flex dark:bg-afri-purple-deep">
       {/* Mobile top bar */}
-      <header className="flex items-center justify-between bg-afri-purple px-4 py-3 lg:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-afri-purple px-4 py-3 lg:hidden dark:bg-afri-purple-surface">
         <Logo variant="white" className="h-8" />
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className="rounded-lg p-2 text-afri-white hover:bg-afri-white/10"
-          aria-label="Toggle navigation"
-        >
-          <MenuIcon />
-        </button>
+        <div className="flex items-center gap-1">
+          <ThemeToggle className="text-afri-white/90 hover:bg-afri-white/10" />
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="rounded-lg p-2 text-afri-white hover:bg-afri-white/10"
+            aria-label="Toggle navigation"
+          >
+            <MenuIcon />
+          </button>
+        </div>
       </header>
+
+      {/* Mobile nav overlay */}
+      {open && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-afri-black/50 lg:hidden"
+          aria-label="Close navigation"
+          onClick={() => setOpen(false)}
+        />
+      )}
 
       {/* Sidebar */}
       <aside
-        className={`${open ? 'block' : 'hidden'} bg-afri-purple lg:sticky lg:top-0 lg:block lg:h-screen lg:w-64 lg:shrink-0`}
+        className={`fixed inset-y-0 left-0 z-50 w-72 transform bg-afri-purple transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:block lg:h-screen lg:w-64 lg:shrink-0 lg:translate-x-0 dark:bg-afri-purple-surface ${
+          open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
       >
         <div className="flex h-full flex-col">
           <div className="hidden px-6 py-7 lg:block">
             <Logo variant="white" className="w-[160px]" />
           </div>
 
-          <nav className="flex flex-1 flex-col gap-1 px-3 py-3 lg:py-0">
+          <div className="flex items-center justify-between px-4 py-4 lg:hidden">
+            <Logo variant="white" className="h-8" />
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-lg p-2 text-afri-white hover:bg-afri-white/10"
+              aria-label="Close navigation"
+            >
+              <CloseIcon />
+            </button>
+          </div>
+
+          <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-3 lg:py-0">
             {nav.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 onClick={() => setOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-lg px-3 py-2.5 font-body text-sm transition-colors ${isActive
-                    ? 'bg-afri-white text-afri-purple font-medium'
-                    : 'text-afri-white/85 hover:bg-afri-white/10'
+                  `flex items-center gap-3 rounded-lg px-3 py-2.5 font-body text-sm transition-colors ${
+                    isActive
+                      ? 'bg-afri-white font-medium text-afri-purple dark:bg-afri-lavender dark:text-afri-purple-deep'
+                      : 'text-afri-white/85 hover:bg-afri-white/10'
                   }`
                 }
               >
@@ -78,8 +108,11 @@ export default function AppLayout() {
           </nav>
 
           <div className="border-t border-afri-white/15 p-3">
+            <div className="mb-2 hidden lg:block">
+              <ThemeToggle className="w-full justify-center text-afri-white/85 hover:bg-afri-white/10" />
+            </div>
             <div className="flex items-center gap-3 px-2 py-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-afri-white/15 font-heading text-sm font-semibold text-afri-white">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-afri-white/15 font-heading text-sm font-semibold text-afri-white">
                 {initials}
               </span>
               <div className="min-w-0 flex-1">
@@ -88,6 +121,7 @@ export default function AppLayout() {
               </div>
             </div>
             <button
+              type="button"
               onClick={handleSignOut}
               className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 font-body text-sm text-afri-white/85 transition-colors hover:bg-afri-white/10"
             >
@@ -100,7 +134,7 @@ export default function AppLayout() {
 
       {/* Main content */}
       <main className="min-w-0 flex-1">
-        <div className="mx-auto max-w-7xl px-5 py-6 sm:px-8 lg:px-12 lg:py-10">
+        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-6 lg:px-10 lg:py-10">
           <Outlet />
         </div>
       </main>
@@ -108,7 +142,6 @@ export default function AppLayout() {
   )
 }
 
-/* --- Inline icons (stroke = currentColor, brand-neutral) --- */
 const iconProps = {
   width: 18,
   height: 18,
@@ -162,5 +195,10 @@ function LogoutIcon() {
 function MenuIcon() {
   return (
     <svg {...iconProps} width="22" height="22"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+  )
+}
+function CloseIcon() {
+  return (
+    <svg {...iconProps} width="22" height="22"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
   )
 }

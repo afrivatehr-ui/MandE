@@ -57,7 +57,7 @@ export default function VolunteerDetail() {
           </button>
         )}
         {isArchived && (
-          <span className="rounded-full bg-afri-black/5 px-3 py-1 text-xs text-afri-black/50">Archived — data kept for reports</span>
+          <span className="afri-subtle rounded-full bg-afri-black/5 px-3 py-1 text-xs dark:bg-afri-white/10">Archived — data kept for reports</span>
         )}
       </div>
 
@@ -69,7 +69,7 @@ export default function VolunteerDetail() {
           </span>
           <div>
             <h1 className="font-heading text-h2 text-afri-purple">{volunteer.full_name}</h1>
-            <p className="font-body text-sm text-afri-black/60">
+            <p className="afri-muted font-body text-sm">
               {volunteer.volunteer_id} · {volunteer.email}
             </p>
             {latest && (
@@ -86,7 +86,7 @@ export default function VolunteerDetail() {
       {latest?.category && (
         <div className="afri-card mb-6 border-l-4 border-l-afri-purple p-5">
           <p className="font-heading text-sm font-semibold text-afri-purple">Recommended next step</p>
-          <p className="mt-1 font-body text-sm text-afri-black/75">{getActionDescription(latest.category)}</p>
+          <p className="afri-muted mt-1 font-body text-sm">{getActionDescription(latest.category)}</p>
         </div>
       )}
 
@@ -152,10 +152,10 @@ export default function VolunteerDetail() {
 function DimCard({ label, value, max = 5 }) {
   return (
     <div className="afri-card p-4">
-      <p className="font-body text-xs uppercase tracking-wide text-afri-black/50">{label}</p>
+      <p className="afri-subtle font-body text-xs uppercase tracking-wide">{label}</p>
       <p className="mt-1 font-heading text-2xl font-bold text-afri-purple">
         {value == null ? '—' : Number(value).toFixed(1)}
-        <span className="text-sm font-medium text-afri-black/40"> / {max}</span>
+        <span className="afri-subtle text-sm font-medium"> / {max}</span>
       </p>
     </div>
   )
@@ -164,15 +164,16 @@ function DimCard({ label, value, max = 5 }) {
 function Expandable({ title, children, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-lg border border-afri-lavender">
+    <div className="rounded-lg border border-afri-lavender dark:border-afri-purple-light/25">
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between px-4 py-3 font-heading text-sm font-medium text-afri-purple"
+        className="flex w-full items-center justify-between px-4 py-3 font-heading text-sm font-medium"
       >
         {title}
-        <span className="text-afri-black/40">{open ? '−' : '+'}</span>
+        <span className="afri-subtle">{open ? '−' : '+'}</span>
       </button>
-      {open && <div className="border-t border-afri-lavender px-4 py-4">{children}</div>}
+      {open && <div className="border-t border-afri-lavender px-4 py-4 dark:border-afri-purple-light/25">{children}</div>}
     </div>
   )
 }

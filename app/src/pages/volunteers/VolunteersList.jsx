@@ -26,6 +26,7 @@ export default function VolunteersList() {
     if (!deployments) return []
     const q = search.trim().toLowerCase()
     return deployments.filter((d) => {
+      if (d.volunteerArchived) return false
       if (q && !`${d.volunteerName} ${d.volunteerCode} ${d.orgName}`.toLowerCase().includes(q)) return false
       if (category && d.category !== category) return false
       if (orgId && d.organisation_id !== orgId) return false
@@ -104,8 +105,8 @@ export default function VolunteersList() {
     <div>
       <PageHeader title="Volunteers" subtitle={`${rows.length} deployment${rows.length === 1 ? '' : 's'}`} />
 
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="min-w-[200px] flex-1">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end">
+        <div className="min-w-0 flex-1 sm:col-span-2 lg:min-w-[200px]">
           <label className="afri-label">Search</label>
           <input
             value={search}
@@ -146,6 +147,8 @@ export default function VolunteersList() {
         columns={columns}
         rows={rows}
         rowKey={(r) => r.id}
+        mobilePrimaryKeys={['volunteerName', 'orgName']}
+        hideOnMobile={['task', 'prof', 'impact', 'flag']}
         onRowClick={(r) => navigate(`/volunteers/${r.volunteer_id}`)}
         emptyState={
           <EmptyState

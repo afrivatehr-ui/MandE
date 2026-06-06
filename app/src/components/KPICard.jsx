@@ -16,19 +16,19 @@ export default function KPICard({ label, value, sub, tone = 'default', icon, onC
       className={`afri-card flex flex-col gap-1 p-5 ${toneStyles[tone] ?? toneStyles.default} ${onClick ? 'cursor-pointer hover:shadow-lg transition-shadow' : ''}`}
     >
       <div className="flex items-center justify-between">
-        <p className={`font-body text-xs uppercase tracking-wide ${onPurple ? 'text-afri-white/70' : 'text-afri-black/55'}`}>
+        <p className={`font-body text-xs uppercase tracking-wide ${onPurple ? 'text-afri-white/70' : 'afri-subtle'}`}>
           {label}
         </p>
         {icon && <span className={onPurple ? 'text-afri-white/70' : 'text-afri-purple/60'}>{icon}</span>}
       </div>
       <p
-        className={`font-heading text-3xl font-bold ${onPurple ? 'text-afri-white' : tone === 'alert' ? 'text-afri-red' : 'text-afri-purple'
+        className={`font-heading text-3xl font-bold ${onPurple ? 'text-afri-white' : tone === 'alert' ? 'text-afri-red' : 'text-afri-purple dark:text-afri-lavender'
           }`}
       >
         {value}
       </p>
       {sub && (
-        <p className={`font-body text-xs ${onPurple ? 'text-afri-white/70' : 'text-afri-black/50'}`}>{sub}</p>
+        <p className={`font-body text-xs ${onPurple ? 'text-afri-white/70' : 'afri-subtle'}`}>{sub}</p>
       )}
     </div>
   )

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useThemeColors } from '../../hooks/useThemeColors'
 import {
   ResponsiveContainer,
   BarChart,
@@ -32,6 +33,7 @@ import { formatVpi, formatDateTime } from '../../utils/format'
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const colors = useThemeColors()
   const { data: deployments, isLoading, error } = useAllDeployments()
 
   const derived = useMemo(() => {
@@ -90,9 +92,9 @@ export default function Dashboard() {
               {distribution.length ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={distribution} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#000' }} interval={0} angle={-15} textAnchor="end" height={50} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#000' }} />
-                    <Tooltip formatter={(v) => `${v}%`} cursor={{ fill: '#F0E7F6' }} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: colors.tick }} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: colors.tick }} />
+                    <Tooltip formatter={(v) => `${v}%`} cursor={{ fill: colors.tooltipCursor }} />
                     <Bar dataKey="vpi" radius={[6, 6, 0, 0]}>
                       {distribution.map((entry) => (
                         <Cell key={entry.name} fill={categoryHex[entry.category]} />
@@ -110,10 +112,10 @@ export default function Dashboard() {
               {dims?.length ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <RadarChart data={dims} outerRadius={100}>
-                    <PolarGrid stroke="#E3D4EC" />
-                    <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: '#000' }} />
-                    <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: '#8D4087' }} />
-                    <Radar dataKey="value" stroke="#8D4087" fill="#8D4087" fillOpacity={0.4} />
+                    <PolarGrid stroke={colors.grid} />
+                    <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: colors.tick }} />
+                    <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: colors.radarStroke }} />
+                    <Radar dataKey="value" stroke={colors.radarStroke} fill={colors.radarFill} fillOpacity={0.4} />
                     <Tooltip formatter={(v) => `${v} / 5`} />
                   </RadarChart>
                 </ResponsiveContainer>
@@ -128,16 +130,16 @@ export default function Dashboard() {
             <div className="afri-card p-5">
               <h2 className="mb-4 font-heading text-h3 text-afri-purple">Action Flags — Needs Intervention</h2>
               {flags.length ? (
-                <ul className="flex flex-col divide-y divide-afri-lavender">
+                <ul className="flex flex-col divide-y divide-afri-lavender dark:divide-afri-purple-light/20">
                   {flags.map((d) => (
-                    <li key={d.id} className="flex items-center justify-between gap-3 py-3">
+                    <li key={d.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-heading font-medium text-afri-purple">{d.volunteerName}</p>
-                        <p className="truncate font-body text-sm text-afri-black/60">{d.orgName}</p>
+                        <p className="truncate font-heading font-medium">{d.volunteerName}</p>
+                        <p className="afri-muted truncate font-body text-sm">{d.orgName}</p>
                       </div>
                       <div className="flex shrink-0 items-center gap-3">
                         <span className="font-heading text-sm font-semibold text-afri-red">{formatVpi(d.vpi)}</span>
-                        <button onClick={() => navigate(`/volunteers/${d.volunteer_id}`)} className="afri-btn-secondary !px-3 !py-1.5 text-xs">
+                        <button type="button" onClick={() => navigate(`/volunteers/${d.volunteer_id}`)} className="afri-btn-secondary !px-3 !py-1.5 text-xs">
                           Schedule Review
                         </button>
                       </div>
@@ -145,7 +147,7 @@ export default function Dashboard() {
                   ))}
                 </ul>
               ) : (
-                <p className="py-6 text-center font-body text-sm text-afri-black/50">
+                <p className="afri-subtle py-6 text-center font-body text-sm">
                   No volunteers currently need intervention.
                 </p>
               )}
@@ -154,27 +156,27 @@ export default function Dashboard() {
             <div className="afri-card p-5">
               <h2 className="mb-4 font-heading text-h3 text-afri-purple">Recent Submissions</h2>
               {recent.length ? (
-                <ul className="flex flex-col divide-y divide-afri-lavender">
+                <ul className="flex flex-col divide-y divide-afri-lavender dark:divide-afri-purple-light/20">
                   {recent.map((r) => (
-                    <li key={r.id} className="flex items-center justify-between gap-3 py-3">
+                    <li key={r.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-heading font-medium text-afri-purple">{r.name}</p>
-                        <p className="truncate font-body text-sm text-afri-black/60">
+                        <p className="truncate font-heading font-medium">{r.name}</p>
+                        <p className="afri-muted truncate font-body text-sm">
                           {r.org} · {r.type} survey
                         </p>
                       </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
+                      <div className="flex shrink-0 flex-row items-center gap-2 sm:flex-col sm:items-end sm:gap-1">
                         <VPIBadge category={r.scored ? r.category : null} showLabel={false} />
                         {!r.scored && (
-                          <span className="font-body text-[10px] text-afri-black/40">Pending VPI</span>
+                          <span className="afri-subtle font-body text-[10px]">Pending VPI</span>
                         )}
-                        <span className="font-body text-xs text-afri-black/45">{formatDateTime(r.at)}</span>
+                        <span className="afri-subtle font-body text-xs">{formatDateTime(r.at)}</span>
                       </div>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="py-6 text-center font-body text-sm text-afri-black/50">No submissions yet.</p>
+                <p className="afri-subtle py-6 text-center font-body text-sm">No submissions yet.</p>
               )}
             </div>
           </div>
@@ -186,7 +188,7 @@ export default function Dashboard() {
 
 function NoChartData({ label = 'No scored deployments yet.' }) {
   return (
-    <div className="flex h-[280px] items-center justify-center px-4 text-center font-body text-sm text-afri-black/45">
+    <div className="afri-subtle flex h-[280px] items-center justify-center px-4 text-center font-body text-sm">
       {label}
     </div>
   )
