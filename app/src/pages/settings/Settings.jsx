@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import PageHeader from '../../components/PageHeader'
+import PasswordInput from '../../components/PasswordInput'
 import Spinner from '../../components/Spinner'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { ErrorNote } from '../dashboard/Dashboard'
@@ -221,18 +222,26 @@ export default function Settings() {
         <section className="afri-card p-6">
           <h2 className="mb-2 font-heading text-h3 text-afri-purple">Email configuration</h2>
           <p className="mb-4 font-body text-sm text-afri-black/60">
-            Survey invitations are sent via Gmail SMTP (<code className="rounded bg-afri-lavender px-1.5 py-0.5">afrivatehr@gmail.com</code>).
+            Survey invitations and auth emails (confirm email, password reset, magic link) are sent via Gmail SMTP.
             Credentials are stored as Supabase Edge Function secrets, not in this app.
           </p>
           <ul className="flex flex-col gap-2 font-body text-sm text-afri-black/75">
             <SecretRow name="SMTP_USER" desc="Gmail address, e.g. afrivatehr@gmail.com" />
             <SecretRow name="SMTP_PASS" desc="Gmail app password (16 characters — not your login password)" />
             <SecretRow name="EMAIL_FROM" desc="Sender shown to recipients, e.g. Afrivate M&E &lt;afrivatehr@gmail.com&gt;" />
-            <SecretRow name="APP_URL" desc="Public base URL used in survey links and email logo ({APP_URL}/afrivate-logo.svg)" />
-            <SecretRow name="LOGO_URL" desc="Optional override for logo image URL in emails (use PNG for Outlook)" />
+            <SecretRow name="APP_URL" desc="Public site URL (survey links + default logo path)" />
+            <SecretRow name="LOGO_URL" desc="Optional logo URL for emails (default: {APP_URL}/logos/afrivate-full-logo-purple.png)" />
+            <SecretRow name="SEND_EMAIL_HOOK_SECRET" desc="Auth hook secret — set on send-auth-email function after enabling Send Email hook in Supabase Auth" />
           </ul>
           <p className="mt-4 font-body text-xs text-afri-black/45">
-            Set in Supabase Dashboard → Edge Functions → Secrets. Create a Gmail app password at{' '}
+            Set secrets in Supabase Dashboard → Edge Functions → Secrets. Enable branded auth emails under
+            Authentication → Hooks → Send Email → HTTPS URL:{' '}
+            <code className="rounded bg-afri-lavender px-1">…/functions/v1/send-auth-email</code>.
+            Add redirect URLs in Authentication → URL Configuration:{' '}
+            <code className="rounded bg-afri-lavender px-1">/reset-password</code>,{' '}
+            <code className="rounded bg-afri-lavender px-1">/dashboard</code>,{' '}
+            <code className="rounded bg-afri-lavender px-1">/login</code>.
+            Gmail app password:{' '}
             <a href="https://myaccount.google.com/apppasswords" className="text-afri-purple underline" target="_blank" rel="noreferrer">
               myaccount.google.com/apppasswords
             </a>{' '}
@@ -272,7 +281,7 @@ function InviteForm({ onInvite, busy }) {
   return (
     <div className="mt-6 border-t border-afri-lavender pt-5">
       <h3 className="mb-3 font-heading text-sm font-semibold text-afri-purple">Invite a new user</h3>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input className="afri-input" placeholder="Full name" value={form.name} onChange={(e) => set({ name: e.target.value })} />
         <input className="afri-input" type="email" placeholder="Email" value={form.email} onChange={(e) => set({ email: e.target.value })} />
         <select className="afri-input" value={form.role} onChange={(e) => set({ role: e.target.value })}>
@@ -280,7 +289,14 @@ function InviteForm({ onInvite, busy }) {
             <option key={r} value={r}>{r}</option>
           ))}
         </select>
-        <input className="afri-input" type="text" placeholder="Temp password (min 8)" value={form.password} onChange={(e) => set({ password: e.target.value })} />
+        <PasswordInput
+          id="invite-password"
+          showLabel={false}
+          placeholder="Temp password (min 8)"
+          autoComplete="new-password"
+          value={form.password}
+          onChange={(e) => set({ password: e.target.value })}
+        />
       </div>
       <button onClick={() => valid && onInvite(form)} disabled={!valid || busy} className="afri-btn-primary mt-3">
         {busy ? <Spinner /> : 'Invite user'}

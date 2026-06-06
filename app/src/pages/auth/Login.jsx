@@ -1,23 +1,26 @@
 import { useState } from 'react'
-import { useNavigate, useLocation, Navigate } from 'react-router-dom'
+import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
-import Logo from '../../components/Logo'
+import AuthCard from '../../components/auth/AuthCard'
+import PasswordInput from '../../components/PasswordInput'
 import Spinner from '../../components/Spinner'
 
 export default function Login() {
-  const { signIn, session, loading } = useAuthStore()
+  const { signIn, sendMagicLink, session, loading } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
+  const [mode, setMode] = useState('password')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [magicSent, setMagicSent] = useState(false)
 
   const from = location.state?.from || '/dashboard'
 
   if (!loading && session) return <Navigate to={from} replace />
 
-  async function handleSubmit(e) {
+  async function handlePasswordSubmit(e) {
     e.preventDefault()
     setError('')
     setSubmitting(true)
@@ -31,23 +34,68 @@ export default function Login() {
     }
   }
 
+  async function handleMagicSubmit(e) {
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
+    try {
+      await sendMagicLink(email.trim())
+      setMagicSent(true)
+    } catch (err) {
+      setError(err?.message || 'Could not send sign-in link. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (magicSent) {
+    return (
+      <AuthCard>
+        <h1 className="font-heading text-h2 text-afri-purple">Check your email</h1>
+        <p className="mt-3 text-sm text-afri-gray-600">
+          We sent a one-time sign-in link to <strong>{email}</strong>. Click the link in the email to
+          access the platform — it expires shortly.
+        </p>
+        <button type="button" onClick={() => setMagicSent(false)} className="afri-btn-secondary mt-6 w-full">
+          Use a different email
+        </button>
+      </AuthCard>
+    )
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-afri-lavender p-6">
-      <div className="w-full max-w-md overflow-hidden rounded-card bg-afri-white shadow-card">
-        <div className="flex flex-col items-center gap-3 bg-afri-purple px-8 py-10">
-          <Logo variant="white" className="w-[180px]" />
-          <p className="font-body text-sm text-afri-white/80">Monitoring &amp; Evaluation Platform</p>
+    <AuthCard>
+      <h1 className="font-heading text-h2 text-afri-purple">Sign in</h1>
+
+      <div className="mt-4 flex rounded-lg border border-afri-lavender bg-afri-lavender/40 p-1">
+        <button
+          type="button"
+          onClick={() => { setMode('password'); setError('') }}
+          className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+            mode === 'password' ? 'bg-afri-white text-afri-purple shadow-sm' : 'text-afri-gray-600'
+          }`}
+        >
+          Password
+        </button>
+        <button
+          type="button"
+          onClick={() => { setMode('magic'); setError('') }}
+          className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+            mode === 'magic' ? 'bg-afri-white text-afri-purple shadow-sm' : 'text-afri-gray-600'
+          }`}
+        >
+          Magic link
+        </button>
+      </div>
+
+      {error && (
+        <div className="mt-4 rounded-lg border border-afri-red/30 bg-afri-red/5 px-4 py-3 text-sm text-afri-red">
+          {error}
         </div>
+      )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-8">
-          <h1 className="font-heading text-h2 text-afri-purple">Sign in</h1>
-
-          {error && (
-            <div className="rounded-lg border border-afri-red/30 bg-afri-red/5 px-4 py-3 text-sm text-afri-red">
-              {error}
-            </div>
-          )}
-
+      {mode === 'password' ? (
+        <form onSubmit={handlePasswordSubmit} className="mt-4 flex flex-col gap-4">
           <div>
             <label htmlFor="email" className="afri-label">Email</label>
             <input
@@ -62,32 +110,56 @@ export default function Login() {
             />
           </div>
 
-          <div>
-            <label htmlFor="password" className="afri-label">Password</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="afri-input"
-              placeholder="••••••••"
-            />
+          <PasswordInput
+            id="password"
+            label="Password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+
+          <div className="text-right">
+            <Link to="/forgot-password" className="text-sm font-medium text-afri-purple hover:underline">
+              Forgot password?
+            </Link>
           </div>
 
-          <button type="submit" disabled={submitting} className="afri-btn-primary mt-2 w-full">
+          <button type="submit" disabled={submitting} className="afri-btn-primary w-full">
             {submitting ? <Spinner /> : 'Sign in'}
           </button>
-
-          <p className="text-center text-sm text-afri-gray-600">
-            Don't have an account?{' '}
-            <a href="/signup" className="font-semibold text-afri-purple hover:underline">
-              Request access
-            </a>
-          </p>
         </form>
-      </div>
-    </div>
+      ) : (
+        <form onSubmit={handleMagicSubmit} className="mt-4 flex flex-col gap-4">
+          <p className="text-sm text-afri-gray-600">
+            We&apos;ll email you a secure one-time link — no password needed.
+          </p>
+          <div>
+            <label htmlFor="magic-email" className="afri-label">Email</label>
+            <input
+              id="magic-email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="afri-input"
+              placeholder="you@afrivate.com"
+            />
+          </div>
+          <button type="submit" disabled={submitting} className="afri-btn-primary w-full">
+            {submitting ? <Spinner /> : 'Send magic link'}
+          </button>
+        </form>
+      )}
+
+      <p className="mt-4 text-center text-sm text-afri-gray-600">
+        Don&apos;t have an account?{' '}
+        <Link to="/signup" className="font-semibold text-afri-purple hover:underline">
+          Request access
+        </Link>
+      </p>
+    </AuthCard>
   )
 }

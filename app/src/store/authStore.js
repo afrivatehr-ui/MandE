@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 /**
  * Auth + profile (role) state. The session comes from Supabase Auth; the role
@@ -16,14 +16,24 @@ export const useAuthStore = create((set, get) => ({
     if (get().initialised) return
     set({ initialised: true })
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    await get().applySession(session)
+    if (!isSupabaseConfigured) {
+      set({ loading: false })
+      return
+    }
 
-    supabase.auth.onAuthStateChange((_event, nextSession) => {
-      get().applySession(nextSession)
-    })
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      await get().applySession(session)
+
+      supabase.auth.onAuthStateChange((_event, nextSession) => {
+        get().applySession(nextSession)
+      })
+    } catch (err) {
+      console.error('Auth init failed:', err)
+      set({ session: null, user: null, profile: null, loading: false })
+    }
   },
 
   async applySession(session) {
@@ -31,13 +41,18 @@ export const useAuthStore = create((set, get) => ({
       set({ session: null, user: null, profile: null, loading: false })
       return
     }
-    set({ session, user: session.user })
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, email, name, role')
-      .eq('id', session.user.id)
-      .single()
-    set({ profile: profile ?? null, loading: false })
+    set({ session, user: session.user, loading: true })
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, email, name, role')
+        .eq('id', session.user.id)
+        .single()
+      set({ profile: profile ?? null, loading: false })
+    } catch (err) {
+      console.error('Profile fetch failed:', err)
+      set({ profile: null, loading: false })
+    }
   },
 
   async signIn(email, password) {
@@ -50,6 +65,26 @@ export const useAuthStore = create((set, get) => ({
   async signOut() {
     await supabase.auth.signOut()
     set({ session: null, user: null, profile: null })
+  },
+
+  async resetPasswordForEmail(email) {
+    const redirectTo = `${window.location.origin}/reset-password`
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+    if (error) throw error
+  },
+
+  async sendMagicLink(email) {
+    const redirectTo = `${window.location.origin}/dashboard`
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false, emailRedirectTo: redirectTo },
+    })
+    if (error) throw error
+  },
+
+  async updatePassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) throw error
   },
 
   // Convenience role checks (mirrors RLS in the database).

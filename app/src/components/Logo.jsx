@@ -1,19 +1,24 @@
-import iconPurple from '../assets/logo/icon-purple.svg'
+const LOGOS = {
+  purple: '/logos/afrivate-full-logo-purple.png',
+  white: '/logos/afrivate-logo.png',
+  icon: '/logos/afrivate-logo-purple-favicon.png',
+}
 
 /**
- * Brand logo. Uses the Afrivate icon SVG (PNG wordmarks are optional assets).
- *   purple/dark background -> variant="white" (inverted icon)
- *   white/lavender background -> variant="purple"
+ * Brand logo from /public/logos.
+ *   variant="white"  — light logo on purple backgrounds (login header)
+ *   variant="purple" — full purple wordmark on light backgrounds
+ *   iconOnly         — favicon-style mark
  */
 export default function Logo({ variant = 'purple', iconOnly = false, className = '' }) {
-  const invert = variant === 'white'
+  const src = iconOnly ? LOGOS.icon : LOGOS[variant] ?? LOGOS.purple
   return (
     <img
-      src={iconPurple}
+      src={src}
       alt="Afrivate"
-      className={`${invert ? 'brightness-0 invert' : ''} ${className}`.trim()}
+      className={className}
       draggable={false}
-      style={iconOnly ? undefined : { maxHeight: '2.5rem', width: 'auto' }}
+      style={iconOnly ? { height: '2rem', width: 'auto' } : { maxHeight: '3rem', width: 'auto' }}
     />
   )
 }

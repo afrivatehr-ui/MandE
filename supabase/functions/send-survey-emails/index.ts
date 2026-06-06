@@ -12,6 +12,7 @@
 // =============================================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import nodemailer from 'npm:nodemailer@6.9.15'
+import { BRAND, button, fallbackLink, h1, infoCard, p, shell } from '../_shared/email-shell.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -36,7 +37,7 @@ const { fromName, fromEmail } = parseFrom(
   Deno.env.get('EMAIL_FROM') ?? 'Afrivate M&E <afrivatehr@gmail.com>',
 )
 const appUrl = (Deno.env.get('APP_URL') ?? 'http://localhost:5173').replace(/\/$/, '')
-const logoUrl = (Deno.env.get('LOGO_URL') ?? `${appUrl}/afrivate-logo.svg`).replace(/\/$/, '')
+const logoUrl = (Deno.env.get('LOGO_URL') ?? `${appUrl}/logos/afrivate-full-logo-purple.png`).replace(/\/$/, '')
 
 function parseFrom(s: string): { fromName?: string; fromEmail: string } {
   const m = s.match(/^\s*(.*?)\s*<\s*([^>]+?)\s*>\s*$/)
@@ -274,133 +275,6 @@ function fmt(d: string) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-// --- Branded email building blocks ------------------------------------------
-const BRAND = {
-  purple: '#8D4087',
-  purpleDark: '#6E2F69',
-  lavender: '#F0E7F6',
-  blue: '#1D45CF',
-  green: '#317D34',
-  ink: '#1A1A1A',
-  muted: '#6B6B6B',
-}
-
-function shell(opts: { preheader: string; accent: string; body: string }) {
-  const year = new Date().getFullYear()
-  return `<!doctype html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="x-apple-disable-message-reformatting">
-  <meta name="color-scheme" content="light">
-  <meta name="supported-color-schemes" content="light">
-  <title>Afrivate M&amp;E</title>
-  <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
-  <style type="text/css">
-    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
-    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
-    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
-    @media only screen and (max-width: 620px) {
-      .email-container { width: 100% !important; max-width: 100% !important; }
-      .email-padding { padding: 24px 18px !important; }
-      .email-header { padding: 22px 18px !important; }
-      .email-body { padding: 24px 18px !important; }
-      .email-footer { padding: 18px !important; }
-      .logo-img { width: 120px !important; max-width: 120px !important; }
-      .btn-link { display: block !important; width: 100% !important; box-sizing: border-box !important; }
-    }
-  </style>
-</head>
-<body style="margin:0;padding:0;background-color:${BRAND.lavender};word-spacing:normal;">
-  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${opts.preheader}</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.lavender};">
-    <tr>
-      <td align="center" style="padding:24px 12px;" class="email-padding">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="email-container" style="width:100%;max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
-          <!-- Header -->
-          <tr>
-            <td class="email-header" style="background-color:${BRAND.purple};padding:24px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td align="left" valign="middle">
-                    <img src="${logoUrl}" width="140" alt="Afrivate — AfriVate Technologies" class="logo-img" style="display:block;width:140px;max-width:140px;height:auto;border:0;">
-                  </td>
-                  <td align="right" valign="middle" style="font-family:Roboto,Arial,sans-serif;font-size:11px;line-height:1.4;color:rgba(255,255,255,0.9);">
-                    Monitoring&nbsp;&amp;&nbsp;Evaluation
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <!-- Accent -->
-          <tr><td style="height:4px;background-color:${opts.accent};font-size:0;line-height:0;">&nbsp;</td></tr>
-          <!-- Body -->
-          <tr>
-            <td class="email-body" style="padding:32px;font-family:Roboto,Arial,sans-serif;color:${BRAND.ink};">${opts.body}</td>
-          </tr>
-          <!-- Footer -->
-          <tr>
-            <td class="email-footer" style="padding:20px 32px;background-color:#FAF7FC;border-top:1px solid ${BRAND.lavender};">
-              <p style="margin:0 0 12px;font-family:Roboto,Arial,sans-serif;font-size:12px;line-height:1.65;color:${BRAND.muted};">
-                This is an automated message from the Afrivate Monitoring &amp; Evaluation team at AfriVate Technologies Ltd.
-                Your responses are confidential and used only to improve volunteer placements.
-              </p>
-              <p style="margin:0 0 12px;padding:10px 12px;background-color:#FFF8E6;border-left:3px solid #EFDA0E;font-family:Roboto,Arial,sans-serif;font-size:12px;line-height:1.6;color:${BRAND.ink};">
-                <strong>Please do not reply to this email.</strong> This inbox is not monitored. For help, contact your Afrivate M&amp;E coordinator directly.
-              </p>
-              <p style="margin:0;font-family:Poppins,Arial,sans-serif;font-size:12px;font-weight:600;color:${BRAND.purple};">AfriVate Technologies Ltd.</p>
-            </td>
-          </tr>
-        </table>
-        <p style="margin:16px 0 0;font-family:Roboto,Arial,sans-serif;font-size:11px;line-height:1.5;color:${BRAND.muted};max-width:600px;">
-          © ${year} AfriVate Technologies Ltd. · This survey link is unique to you — please do not forward it.
-        </p>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`
-}
-
-function button(link: string, label: string, color: string) {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:24px 0;">
-    <tr>
-      <td align="center">
-        <!--[if mso]>
-        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${link}" style="height:48px;v-text-anchor:middle;width:280px;" arcsize="12%" stroke="f" fillcolor="${color}">
-          <w:anchorlock/>
-          <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">${label}</center>
-        </v:roundrect>
-        <![endif]-->
-        <!--[if !mso]><!-->
-        <a href="${link}" class="btn-link" style="background-color:${color};border-radius:10px;color:#ffffff;display:inline-block;font-family:Poppins,Arial,sans-serif;font-size:15px;font-weight:600;line-height:48px;text-align:center;text-decoration:none;padding:0 28px;min-width:200px;">${label}</a>
-        <!--<![endif]-->
-      </td>
-    </tr>
-  </table>`
-}
-
-function infoCard(rows: [string, string][]) {
-  const cells = rows
-    .map(
-      ([k, v]) => `<tr>
-        <td style="padding:6px 0;font-family:Roboto,Arial,sans-serif;font-size:12px;color:${BRAND.muted};text-transform:uppercase;letter-spacing:.4px;width:42%">${k}</td>
-        <td style="padding:6px 0;font-family:Roboto,Arial,sans-serif;font-size:14px;color:${BRAND.ink};font-weight:500">${v}</td>
-      </tr>`,
-    )
-    .join('')
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.lavender};border-radius:12px;padding:8px 16px;margin:8px 0 4px">${cells}</table>`
-}
-
-function fallbackLink(link: string) {
-  return `<p style="margin:18px 0 0;font-family:Roboto,Arial,sans-serif;font-size:12px;color:${BRAND.muted};line-height:1.6">
-    Button not working? Copy and paste this link into your browser:<br>
-    <a href="${link}" style="color:${BRAND.blue};word-break:break-all">${link}</a></p>`
-}
-
 function volunteerEmail({ volunteerName, orgName, role, period, closesOn, link }: {
   volunteerName: string; orgName: string; role: string; period: string; closesOn: string; link: string
 }) {
@@ -420,17 +294,25 @@ The Afrivate M&E Team
 AfriVate Technologies Ltd.`
 
   const body = `
-    <h1 style="margin:0 0 12px;font-family:Poppins,Arial,sans-serif;font-size:22px;font-weight:600;color:${BRAND.purple}">Thank you for your service, ${volunteerName.split(' ')[0]} 👏</h1>
-    <p style="margin:0 0 16px;font-family:Roboto,Arial,sans-serif;font-size:15px;color:${BRAND.ink};line-height:1.7">
-      We'd love to hear about your time as <strong>${role}</strong> at <strong>${orgName}</strong>. Your honest feedback helps us improve placements for every volunteer who comes after you.</p>
+    ${h1(`Thank you for your service, ${volunteerName.split(' ')[0]} 👏`)}
+    ${p(`We'd love to hear about your time as <strong>${role}</strong> at <strong>${orgName}</strong>. Your honest feedback helps us improve placements for every volunteer who comes after you.`)}
     ${infoCard([['Organisation', orgName], ['Your role', role], ['Deployment', period]])}
-    <p style="margin:16px 0 0;font-family:Roboto,Arial,sans-serif;font-size:15px;color:${BRAND.ink};line-height:1.7">
-      It takes about <strong>5–10 minutes</strong> and your responses are completely confidential.</p>
+    ${p('It takes about <strong>5–10 minutes</strong> and your responses are completely confidential.')}
     ${button(link, 'Start your survey →', BRAND.purple)}
-    <p style="margin:0;font-family:Roboto,Arial,sans-serif;font-size:13px;color:${BRAND.muted}">⏳ This link is unique to you and closes on <strong>${closesOn}</strong>.</p>
+    ${p(`⏳ This link is unique to you and closes on <strong>${closesOn}</strong>.`)}
     ${fallbackLink(link)}`
 
-  return { html: shell({ preheader: `Share your experience at ${orgName} — takes 5–10 minutes.`, accent: BRAND.blue, body }), text }
+  return {
+    html: shell({
+      preheader: `Share your experience at ${orgName} — takes 5–10 minutes.`,
+      accent: BRAND.blue,
+      body,
+      logoUrl,
+      footerNote:
+        'This is an automated message from the Afrivate Monitoring &amp; Evaluation team. Your responses are confidential and used only to improve volunteer placements.',
+    }),
+    text,
+  }
 }
 
 function orgEmail({ supervisorName, volunteerName, orgName, role, period, closesOn, link }: {
@@ -452,15 +334,23 @@ The Afrivate M&E Team
 AfriVate Technologies Ltd.`
 
   const body = `
-    <h1 style="margin:0 0 12px;font-family:Poppins,Arial,sans-serif;font-size:22px;font-weight:600;color:${BRAND.purple}">A quick feedback request</h1>
-    <p style="margin:0 0 16px;font-family:Roboto,Arial,sans-serif;font-size:15px;color:${BRAND.ink};line-height:1.7">
-      Dear ${supervisorName}, thank you for hosting <strong>${volunteerName}</strong> at <strong>${orgName}</strong>. Your assessment of their contribution is a key part of how Afrivate measures and improves volunteer impact.</p>
+    ${h1('A quick feedback request')}
+    ${p(`Dear ${supervisorName}, thank you for hosting <strong>${volunteerName}</strong> at <strong>${orgName}</strong>. Your assessment of their contribution is a key part of how Afrivate measures and improves volunteer impact.`)}
     ${infoCard([['Volunteer', volunteerName], ['Role', role], ['Deployment', period]])}
-    <p style="margin:16px 0 0;font-family:Roboto,Arial,sans-serif;font-size:15px;color:${BRAND.ink};line-height:1.7">
-      The assessment takes about <strong>5 minutes</strong> and all responses are kept confidential.</p>
+    ${p('The assessment takes about <strong>5 minutes</strong> and all responses are kept confidential.')}
     ${button(link, 'Complete the assessment →', BRAND.green)}
-    <p style="margin:0;font-family:Roboto,Arial,sans-serif;font-size:13px;color:${BRAND.muted}">⏳ This link is unique to this deployment and closes on <strong>${closesOn}</strong>.</p>
+    ${p(`⏳ This link is unique to this deployment and closes on <strong>${closesOn}</strong>.`)}
     ${fallbackLink(link)}`
 
-  return { html: shell({ preheader: `Assess ${volunteerName}'s contribution — about 5 minutes.`, accent: BRAND.green, body }), text }
+  return {
+    html: shell({
+      preheader: `Assess ${volunteerName}'s contribution — about 5 minutes.`,
+      accent: BRAND.green,
+      body,
+      logoUrl,
+      footerNote:
+        'This is an automated message from the Afrivate Monitoring &amp; Evaluation team. Your responses are confidential and used only to improve volunteer placements.',
+    }),
+    text,
+  }
 }

@@ -1,12 +1,16 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
+import { isSupabaseConfigured } from './lib/supabase'
+import ConfigError from './components/ConfigError'
 import ProtectedRoute from './components/ProtectedRoute'
 import AppLayout from './components/layout/AppLayout'
 import Toaster from './components/Toast'
 
 import Login from './pages/auth/Login'
 import Signup from './pages/auth/Signup'
+import ForgotPassword from './pages/auth/ForgotPassword'
+import ResetPassword from './pages/auth/ResetPassword'
 import Dashboard from './pages/dashboard/Dashboard'
 import VolunteersList from './pages/volunteers/VolunteersList'
 import VolunteerDetail from './pages/volunteers/VolunteerDetail'
@@ -29,6 +33,10 @@ export default function App() {
     init()
   }, [init])
 
+  if (!isSupabaseConfigured) {
+    return <ConfigError />
+  }
+
   return (
     <>
       <Toaster />
@@ -36,6 +44,8 @@ export default function App() {
         {/* Public */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/survey/volunteer/:token" element={<VolunteerSurvey />} />
         <Route path="/survey/org/:token" element={<OrgSurvey />} />
         <Route path="/survey/custom/:id" element={<CustomSurvey />} />
