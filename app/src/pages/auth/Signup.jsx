@@ -51,23 +51,16 @@ export default function Signup() {
 
             if (authError) throw authError
 
-            // 2. Create access request record (VIEWER role by default, admin must approve)
-            await supabase.from('access_requests').insert({
+            // Access request for admin review (profile is auto-created by handle_new_user trigger).
+            const { error: requestError } = await supabase.from('access_requests').insert({
                 user_id: authData.user.id,
                 email: formData.email.trim(),
                 name: formData.name,
                 organisation: formData.organisation,
                 role_requested: formData.role,
-                status: 'PENDING', // pending, approved, rejected
+                status: 'PENDING',
             })
-
-            // 3. Create profile with VIEWER role (no access until admin approves)
-            await supabase.from('profiles').insert({
-                id: authData.user.id,
-                email: formData.email.trim(),
-                name: formData.name,
-                role: 'VIEWER', // Default viewer until approved
-            })
+            if (requestError) throw requestError
 
             setSuccess(true)
         } catch (err) {

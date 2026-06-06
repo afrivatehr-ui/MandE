@@ -8,7 +8,12 @@ import {
 } from '../api/data'
 
 export const useDeployments = () =>
-  useQuery({ queryKey: ['deployments'], queryFn: fetchDeployments })
+  useQuery({
+    queryKey: ['deployments'],
+    queryFn: fetchDeployments,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
 
 export const useVolunteers = () =>
   useQuery({ queryKey: ['volunteers'], queryFn: fetchVolunteers })

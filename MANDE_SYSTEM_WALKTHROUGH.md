@@ -126,32 +126,42 @@ Once approved, user can sign in with their credentials.
 ### Step 1: Go to Deployments Page
 
 1. Click **Deployments** in the main menu
-2. Click **Create Deployment** button
+2. Click **+ New deployment**
 
-### Step 2: Fill Deployment Form
+### Step 2: Choose who receives the survey email
+
+| Option | Who gets emailed | What you must select |
+|--------|------------------|----------------------|
+| **Volunteer only** | Volunteer self-report survey | Volunteer (recipient) **and** organisation they served at (context) |
+| **Organisation only** | Organisation effectiveness survey | Organisation (recipient) **and** volunteer being rated (context) |
+| **Both parties** | Both survey emails | Volunteer **and** organisation |
+
+Every deployment always records **both** a volunteer and an organisation so surveys and emails show the correct names.
+
+### Step 3: Fill the form
 
 | Field | Details |
 |-------|---------|
-| **Volunteer** | Select from dropdown (or create if new) |
-| **Organisation** | Select partner organisation |
+| **Volunteer** | Select or create. Email required only when the volunteer receives the survey. |
+| **Organisation** | Select or create. Contact email required only when the organisation receives the survey. |
 | **Role Title** | e.g., "Community Health Data Analyst" |
-| **Start Date** | When volunteer begins |
-| **End Date** | When volunteer finishes |
-| **Status** | Usually "ACTIVE" initially |
+| **Start / End Date** | Placement period |
 
-### Step 3: Create
+### Step 4: Create
 
-- Click **Create Deployment**
-- System automatically generates **2 survey tokens**:
-  - One for volunteer self-report
-  - One for organisation feedback
+- Click **Create & email…** (label varies by target)
+- Tokens are generated only for the survey type(s) chosen
+- Emails send from **afrivatehr@gmail.com** with Afrivate branding
+- Use **Email V** / **Email O** to resend one party; **Links** to copy URLs
 
 ### Important Notes
 
-- **Survey tokens** are valid until 14 days after end date (configurable in Settings)
-- Invitation emails are sent automatically on creation; you can **Resend** or copy **Links** anytime from the Deployments page
-- Invitations are only sent for surveys that are **Published** (manage on the Surveys page)
-- Both surveys must be completed for VPI to calculate
+- **Survey tokens** expire 14 days after end date (Settings)
+- Surveys must be **Published** before invitation emails send
+- **Paired deployment VPI:** both surveys required; org score is primary
+- **Organisation-only:** org VPI written when org survey submitted
+- **Volunteer-only:** volunteer self-report VPI written when volunteer survey submitted
+- Emails are responsive, include the Afrivate logo, and say **do not reply**
 
 ---
 
@@ -227,66 +237,81 @@ You can also change status/schedule and edit details in **Edit → Settings**.
 
 ### Sending real survey invitations
 
-Invitations are **automated** and sent from the **Deployments** page:
+Invitations are **automated** from the **Deployments** page:
 
-1. Create a deployment (this auto-generates the two survey tokens). Survey emails are sent immediately to the volunteer and organisation contact.
-2. To re-send, use the **Resend** action on the deployment row.
-3. To share manually instead, use **Links** on the deployment row to copy the survey URLs.
+1. Create a deployment and choose **Volunteer only**, **Organisation only**, or **Both parties**.
+2. Both volunteer and organisation are always selected (one may be context-only).
+3. Survey emails are sent immediately to the chosen recipient(s).
+4. To re-send one party, use **Email V** or **Email O** on the deployment row.
+5. To share manually, use **Links** to copy survey URLs.
 
-**Publish-gating:** invitations are only sent for surveys that are **Published**. If, for example, the Volunteer survey is in Draft, creating/resending a deployment will email the organisation but **skip the volunteer**, and the app will tell you which survey was skipped. A respondent opening a link for a non-Published survey sees a **"Survey not open"** message.
+**Email design:** Branded HTML with the Afrivate logo (hosted at `{APP_URL}/afrivate-logo.svg`), responsive layout for mobile/desktop, and a clear **do not reply** notice. Set `APP_URL` in Supabase Edge Function secrets so logo and survey links use your live domain.
 
-> Automated emails require the `PLUNK_API_KEY` secret on the `send-survey-emails` Edge Function (see DEPLOYMENT.md). Without it, generate the deployment and share the copied links manually.
+**Publish-gating:** invitations are only sent for surveys that are **Published**. The app reports exactly which emails were sent, skipped, or failed.
+
+> Requires `SMTP_USER` and `SMTP_PASS` (Gmail app password) on the `send-survey-emails` Edge Function (see DEPLOYMENT.md).
 
 ---
 
 ## VPI Score Calculation
 
-### Formula
+The platform uses one **core formula** for all VPI percentages. What differs is **which survey questions feed each dimension** and **when the score is written to the deployment**.
+
+### Core formula (all surveys)
 
 ```
-VPI% = ((taskPerf + professionalism + impact + (overall/2)) / 4) × 20
+VPI% = ((taskPerf + professionalism + impact + (overall10 ÷ 2)) / 4) × 20
 ```
 
-### What It Measures
+- Dimension scores (`taskPerf`, `professionalism`, `impact`) are **section averages on a 1–5 scale**
+- `overall10` is the **overall question on a 1–10 scale**, halved to normalise to 1–5 before averaging
+- Result is a **0–100 percentage**
+- Calculated automatically by a **database trigger** on survey submission (source of truth); mirrored in `app/src/utils/vpiEngine.js` for previews
 
-**From Organisation Survey (Primary VPI):**
-- **Task Performance** (avg of 6 questions, 1-5 scale)
-  - Completed tasks to standard
-  - Skills demonstrated
-  - Met deadlines
-  - Initiative shown
-  - Work quality
-  - Minimal supervision needed
-  
-- **Professionalism** (avg of 5 questions, 1-5 scale)
-  - Professional behaviour
-  - Clear communication
-  - Policy adherence
-  - Punctuality
-  - Team integration
-  
-- **Impact** (avg of 4 questions, 1-5 scale)
-  - Measurable value created
-  - Mission support
-  - Irreplaceable contribution
-  - Positive effect on staff morale
-  
-- **Overall Effectiveness** (1 question, 1-10 scale → normalized to 1-5)
-  - General supervisor rating of the volunteer
+### Organisation effectiveness survey (primary VPI for paired deployments)
 
-### Calculation Example
+This is the **supervisor-rated** survey. It produces `org_vpi` on the `org_surveys` row and drives the deployment's primary score when both parties are in a paired deployment.
+
+| Dimension | Source (avg of 1–5 Likert items) |
+|-----------|-------------------------------------|
+| **Task Performance** | 6 questions: tasks completed, skills demonstrated, deadlines met, initiative, work quality, minimal supervision |
+| **Professionalism** | 5 questions: professional behaviour, communication, policy adherence, punctuality, team integration |
+| **Impact** | 4 questions: measurable value, mission support, irreplaceable contribution, moral effect on staff |
+| **Overall** | `s5_overall_effectiveness` (1–10) → divided by 2 in the formula |
+
+**When it counts toward deployment VPI:**
+
+| Deployment type | When org VPI is written to deployment |
+|---------------|--------------------------------------|
+| **Organisation only** | As soon as the org survey is submitted |
+| **Both parties (paired)** | When **both** volunteer and org surveys are submitted (org score is primary) |
+| **Volunteer only** | Org survey not sent — org VPI stored on response row only if submitted via link |
+
+### Calculation example (organisation survey)
 
 ```
 Task Performance:  4.0 (avg of 6 ratings)
-Professionalism:   4.2 (avg of 5 ratings)
-Impact:            3.8 (avg of 4 ratings)
-Overall Eff:       9/2 = 4.5 (from 1-10 scale)
+Professionalism:     4.2 (avg of 5 ratings)
+Impact:              3.8 (avg of 4 ratings)
+Overall Eff:         9 ÷ 2 = 4.5 (from 1–10 scale)
 
 VPI = ((4.0 + 4.2 + 3.8 + 4.5) / 4) × 20
     = (16.5 / 4) × 20
-    = 4.125 × 20
     = 82.5%
 ```
+
+### Volunteer self-report survey (supporting / standalone)
+
+Uses the **same formula** but different proxy dimensions from the volunteer's perspective:
+
+| Dimension in formula | Volunteer section used |
+|---------------------|------------------------|
+| taskPerf | Work experience average (6 items) |
+| professionalism | Onboarding & support average (5 items) |
+| impact | Organisational environment average (4 items) |
+| overall10 | `s5_overall_satisfaction` (1–10) |
+
+Produces `volunteer_vpi` on the response row. For **volunteer-only** deployments, this becomes the deployment VPI when submitted. For **paired** deployments, it is supporting context — the deployment score uses the org rating once both are in.
 
 ### VPI Categories & Actions
 
@@ -404,19 +429,14 @@ If no deployments exist:
 
 ### Email Configuration
 
-Emails are sent via **Plunk** (https://useplunk.com).
+Survey invitations are sent from **afrivatehr@gmail.com** via Gmail SMTP.
 
-- **Plunk API Key** - the *secret* key (starts with `sk_`), required for automated survey invitations
-- **Email From** - sender address (the domain must be verified in Plunk)
-- **App URL** - base URL for survey links
+- **SMTP_USER** — `afrivatehr@gmail.com`
+- **SMTP_PASS** — Gmail app password (16 characters; create at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords))
+- **EMAIL_FROM** — `Afrivate M&E <afrivatehr@gmail.com>`
+- **APP_URL** — base URL for survey links
 
-*These are set via Supabase CLI, not in this UI:*
-```bash
-supabase secrets set PLUNK_API_KEY=sk_xxx
-supabase secrets set EMAIL_FROM="Afrivate M&E <surveys@yourdomain.org>"
-supabase secrets set APP_URL="https://mande.afrivate.com"
-supabase functions deploy send-survey-emails
-```
+*Set these in Supabase Dashboard → Edge Functions → Secrets, then redeploy `send-survey-emails`.*
 
 ---
 
@@ -498,23 +518,23 @@ supabase functions deploy send-survey-emails
 
 **Solution:**
 - Confirm the survey is **Published** (Surveys → Settings) — Draft/Scheduled surveys are skipped when sending
-- For automated emails, set the `PLUNK_API_KEY` secret on the `send-survey-emails` Edge Function in Supabase
+- Set `SMTP_USER` and `SMTP_PASS` (Gmail app password) on the `send-survey-emails` Edge Function in Supabase
 - Otherwise, use the **Links** action on a deployment to copy/share links manually
 
-### "Email sent" but nothing arrives (most common email issue)
+### "Email sent" but nothing arrives
 
-The app reports the **real** delivery result (e.g. "Sent to Volunteer", "Could not send to Organisation (…)"). If the message is accepted but recipients get nothing, it's almost always the **sender domain**:
+The app reports the **real** delivery result (e.g. "Sent to Volunteer", "Could not send to Organisation (…)"). If sending fails or mail doesn't arrive:
 
-- Emails are sent via **Plunk**. The `EMAIL_FROM` address must be on a domain you have **verified in Plunk** (Plunk dashboard → Settings → Identity/Domain → add the SPF/DKIM DNS records).
-- Make sure `PLUNK_API_KEY` is the **secret** key (starts with `sk_`), not the public key.
-- **Fix:**
-  ```bash
-  npx supabase secrets set PLUNK_API_KEY=sk_xxx
-  npx supabase secrets set EMAIL_FROM="Afrivate M&E <surveys@yourdomain.org>"
-  npx supabase secrets set APP_URL="https://your-app-domain"
-  npx supabase functions deploy send-survey-emails
-  ```
-- Also confirm the volunteer/organisation records have **valid email addresses**.
+- **SMTP_PASS** must be a Gmail **app password**, not the normal Gmail login password
+- The Google account must have **2-Step Verification** enabled before you can create an app password
+- Check the recipient's spam folder
+- Confirm volunteer/organisation records have **valid email addresses**
+- In Supabase Dashboard → Edge Functions → Secrets, set:
+  - `SMTP_USER` = `afrivatehr@gmail.com`
+  - `SMTP_PASS` = your app password
+  - `EMAIL_FROM` = `Afrivate M&E <afrivatehr@gmail.com>`
+  - `APP_URL` = your deployed app URL
+- Redeploy the `send-survey-emails` Edge Function after changing secrets
 
 ### User role change not taking effect
 
@@ -602,6 +622,59 @@ The app reports the **real** delivery result (e.g. "Sent to Volunteer", "Could n
 - Org improvements
 - Afrivate improvements
 - Other comments
+
+---
+
+## System Audit (known gaps & operational checklist)
+
+Last reviewed: June 2026.
+
+### Fixed in recent releases
+
+| Area | Status |
+|------|--------|
+| Gmail SMTP (afrivatehr@gmail.com) | ✅ Active — Plunk/Resend removed |
+| Email delivery reporting | ✅ Toast shows real sent/failed/skipped results |
+| Survey completion on Deployments table | ✅ Direct DB lookup + token fallback |
+| Separate volunteer / org survey sends | ✅ Target selector + Email V / Email O |
+| Context party on single-target sends | ✅ Both volunteer & org always selected |
+| Branded responsive emails + do-not-reply | ✅ Logo at `{APP_URL}/afrivate-logo.svg` |
+| Organisation VPI scoring | ✅ Same formula; org dimensions in trigger + `vpiEngine.js` |
+| Custom surveys | ✅ `/surveys` builder (requires migrations 004–005) |
+| Access requests table | ✅ Migration 006 |
+
+### Requires your action after each deploy
+
+1. Run SQL migrations **004 → 008** in Supabase SQL Editor (if not already)
+2. Redeploy Edge Functions: `surveys`, `send-survey-emails`
+3. Set secrets: `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `APP_URL`
+4. Ensure `APP_URL` matches your Netlify URL (logo + survey links)
+5. Confirm built-in surveys are **Published** (Surveys page)
+6. Redeploy frontend on Netlify after code changes (auto on git push if connected)
+
+### Known limitations
+
+| Item | Detail |
+|------|--------|
+| **Logo in Outlook desktop** | SVG may not render; add a PNG at `app/public/afrivate-logo.png` and set `LOGO_URL` secret for best compatibility |
+| **Paired VPI** | Requires **both** surveys — one green dot alone does not produce deployment VPI |
+| **Gmail sending limits** | ~500 emails/day on free Gmail; use Google Workspace for higher volume |
+| **No reply handling** | Emails say do not reply; consider a monitored `hello@` address in footer if needed |
+| **Windows folder `M&E`** | Use `node node_modules/vite/bin/vite.js` or rename folder for local dev |
+| **Missing PNG logo assets** | `Logo.jsx` references PNG files that may not be in repo — add `logo-purple.png` / `logo-white.png` to `app/src/assets/logo/` for in-app branding |
+
+### Quick health check
+
+```sql
+-- Surveys published?
+select key, status from public.surveys;
+
+-- Recent deployments with survey status
+select d.id, d.status, d.vpi_score,
+  exists(select 1 from volunteer_surveys vs where vs.deployment_id = d.id) as vol_in,
+  exists(select 1 from org_surveys os where os.deployment_id = d.id) as org_in
+from deployments d order by d.created_at desc limit 10;
+```
 
 ---
 

@@ -11,23 +11,17 @@ A React frontend talking directly to **Supabase** (Postgres + Auth + Row Level
 Security + Edge Functions). There is no separate Node/Express server to maintain.
 
 ```
-app/                  React 18 + Vite + Tailwind frontend
-  src/
-    components/       Reusable UI (Section 9 of the spec) + survey flow
-    pages/            auth, dashboard, volunteers, organisations,
-                      deployments, reports, settings, surveys (public)
-    store/            Zustand stores (auth, toast, settings)
-    hooks/            React Query data hooks
-    api/              supabase-js data + edge-function clients
-    utils/            vpiEngine.js (+ tests), analytics, csv, formatting
-    config/           survey question definitions
-supabase/
-  migrations/         SQL schema, RLS, VPI trigger
-  seed.sql            sample admin user + volunteers/orgs/deployments
-  functions/
-    surveys/          public, token-validated survey GET/submit
-    send-survey-emails/  emails invitations via Plunk
-    admin-users/      ADMIN-only user create/delete
+MandE/
+├── app/                    React frontend (Netlify via netlify.toml)
+│   └── src/                pages, components, api, utils, store
+├── supabase/
+│   ├── migrations/         SQL schema, RLS, VPI triggers
+│   ├── seed.sql            Demo data
+│   └── functions/          surveys, send-survey-emails, admin-users
+├── netlify.toml
+├── README.md
+├── DEPLOYMENT.md
+└── MANDE_SYSTEM_WALKTHROUGH.md
 ```
 
 | Spec backend piece | Here |
@@ -37,7 +31,7 @@ supabase/
 | Role middleware (ADMIN/HR/VIEWER) | `profiles` table + RLS policies |
 | Express REST API | `supabase-js` from React |
 | VPI calc trigger | Postgres trigger (source of truth) |
-| Nodemailer | `send-survey-emails` Edge Function + Plunk |
+| Nodemailer | `send-survey-emails` Edge Function + Gmail SMTP |
 | Puppeteer / json2csv | client-side `@react-pdf/renderer` + `papaparse` |
 | Docker | not needed (Supabase hosted) |
 
@@ -45,7 +39,7 @@ supabase/
 
 - Node.js 18+
 - A Supabase project (you have one)
-- A [Plunk](https://useplunk.com) account + secret API key and a verified sending domain (for survey emails)
+- Gmail account **afrivatehr@gmail.com** with a [Google App Password](https://myaccount.google.com/apppasswords) for SMTP (requires 2-Step Verification)
 
 ## 1. Database setup
 
@@ -55,7 +49,12 @@ dashboard -> **SQL Editor** and run each file's contents in this order:
 1. `supabase/migrations/20260603000001_schema.sql`
 2. `supabase/migrations/20260603000002_rls.sql`
 3. `supabase/migrations/20260603000003_vpi_trigger.sql`
-4. `supabase/seed.sql`  (optional sample data; creates the admin login below)
+4. `supabase/migrations/20260603000004_surveys.sql`
+5. `supabase/migrations/20260603000005_custom_surveys.sql`
+6. `supabase/migrations/20260603000006_access_requests.sql`
+7. `supabase/migrations/20260607000007_deployment_survey_targets.sql`
+8. `supabase/migrations/20260607000008_deployment_both_parties.sql`
+9. `supabase/seed.sql`  (optional sample data; creates the admin login below)
 
 Or, with the [Supabase CLI](https://supabase.com/docs/guides/cli):
 
@@ -73,14 +72,17 @@ Supabase auto-injects `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
 `SUPABASE_SERVICE_ROLE_KEY` into functions. You only set the email/app secrets:
 
 ```bash
-supabase secrets set PLUNK_API_KEY=your_plunk_secret_key   # starts with sk_
-supabase secrets set EMAIL_FROM="Afrivate M&E <surveys@yourdomain.org>"  # domain verified in Plunk
+supabase secrets set SMTP_USER="afrivatehr@gmail.com"
+supabase secrets set SMTP_PASS="your-16-char-gmail-app-password"
+supabase secrets set EMAIL_FROM="Afrivate M&E <afrivatehr@gmail.com>"
 supabase secrets set APP_URL="https://your-app-domain"   # used in survey links
 
 supabase functions deploy surveys
 supabase functions deploy send-survey-emails
 supabase functions deploy admin-users
 ```
+
+Or set the same secrets in Supabase Dashboard → **Edge Functions → Secrets**.
 
 `surveys` is reached by anonymous respondents using the public anon key; token
 validation happens inside the function. The other two require an authenticated
@@ -96,6 +98,10 @@ npm run dev
 ```
 
 Open the printed URL and sign in.
+
+Deploy the frontend on **Netlify** (see `DEPLOYMENT.md` and root `netlify.toml`).
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Netlify env vars.
+Email secrets (`SMTP_*`, `APP_URL`) go in **Supabase** Edge Function secrets, not Netlify.
 
 ### Windows note (important for this folder)
 

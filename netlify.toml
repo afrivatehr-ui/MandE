@@ -1,0 +1,13 @@
+# Afrivate M&E — Netlify deployment
+# https://docs.netlify.com/configure-builds/file-based-configuration/
+
+[build]
+  base = "app"
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+# SPA: survey links (/survey/volunteer/:token) must serve index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

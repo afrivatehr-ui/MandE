@@ -22,6 +22,11 @@ function json(body: unknown, status = 200) {
   })
 }
 
+function one<T>(rel: T | T[] | null | undefined): T | null {
+  if (Array.isArray(rel)) return rel[0] ?? null
+  return rel ?? null
+}
+
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
@@ -42,6 +47,19 @@ const ORG_REQUIRED = [
   's5_overall_effectiveness', 's5_request_again', 's5_request_same_vol',
 ]
 const ORG_OPTIONAL = ['s6_strengths', 's6_improvements', 's6_afrivate_improvements', 's6_other_feedback']
+
+const INTEGER_FIELDS = new Set([
+  ...VOLUNTEER_REQUIRED.filter((k) => k !== 's5_volunteer_again'),
+  ...ORG_REQUIRED.filter((k) => !['supervisor_name', 'supervisor_title', 's5_request_again', 's5_request_same_vol'].includes(k)),
+])
+
+function coercePayload(payload: Record<string, unknown>) {
+  for (const key of INTEGER_FIELDS) {
+    if (payload[key] !== undefined && payload[key] !== null && payload[key] !== '') {
+      payload[key] = Number(payload[key])
+    }
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -99,6 +117,7 @@ Deno.serve(async (req) => {
       for (const field of [...required, ...optional]) {
         if (answers[field] !== undefined) payload[field] = answers[field]
       }
+      coercePayload(payload)
 
       const table = ctx.type === 'org' ? 'org_surveys' : 'volunteer_surveys'
       const { error } = await supabase.from(table).insert(payload)
@@ -203,6 +222,16 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
 
   if (!deployment) return { error: 'Deployment not found.', status: 404 }
 
+  const vol = one(deployment.volunteers)
+  const org = one(deployment.organisations)
+
+  const table = tokenRow.type === 'org' ? 'org_surveys' : 'volunteer_surveys'
+  const { data: existingSurvey } = await supabase
+    .from(table)
+    .select('id')
+    .eq('deployment_id', tokenRow.deployment_id)
+    .maybeSingle()
+
   // Survey lifecycle gate: a survey only accepts responses while PUBLISHED.
   // If the surveys table isn't present yet, default to accepting (fallback).
   let accepting = true
@@ -219,7 +248,7 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
 
   return {
     type: tokenRow.type as 'volunteer' | 'org',
-    alreadySubmitted: tokenRow.used,
+    alreadySubmitted: Boolean(existingSurvey?.id) || tokenRow.used,
     accepting,
     surveyStatus,
     deployment: {
@@ -229,9 +258,9 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
       end_date: deployment.end_date,
     },
     volunteer: {
-      volunteer_id: deployment.volunteers?.volunteer_id,
-      full_name: deployment.volunteers?.full_name,
+      volunteer_id: vol?.volunteer_id,
+      full_name: vol?.full_name,
     },
-    organisation: { name: deployment.organisations?.name },
+    organisation: { name: org?.name },
   }
 }

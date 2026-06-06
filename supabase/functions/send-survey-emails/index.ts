@@ -5,12 +5,13 @@
 //
 // Called by the authenticated app when a deployment is created (or to resend).
 // Generates/reuses the volunteer + org survey tokens and emails both parties
-// via Plunk (https://useplunk.com). Requires an authenticated ADMIN/HR caller.
+// via Gmail SMTP (afrivatehr@gmail.com). Requires an authenticated ADMIN/HR caller.
 //
 // Only PUBLISHED surveys are sent. Delivery results (delivered / failed /
 // skipped / missing) are returned so the app can report what actually happened.
 // =============================================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import nodemailer from 'npm:nodemailer@6.9.15'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,17 +28,26 @@ function json(body: unknown, status = 200) {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-// Plunk transactional email. PLUNK_API_KEY is the *secret* key (starts with sk_).
-const plunkKey = Deno.env.get('PLUNK_API_KEY')!
-const plunkUrl = (Deno.env.get('PLUNK_API_URL') ?? 'https://api.useplunk.com').replace(/\/$/, '')
-// "Name <email@domain>" or just "email@domain". The domain must be verified in Plunk.
-const { fromName, fromEmail } = parseFrom(Deno.env.get('EMAIL_FROM') ?? 'Afrivate M&E <hello@example.com>')
+const smtpHost = Deno.env.get('SMTP_HOST') ?? 'smtp.gmail.com'
+const smtpPort = Number(Deno.env.get('SMTP_PORT') ?? '587')
+const smtpUser = Deno.env.get('SMTP_USER') ?? ''
+const smtpPass = Deno.env.get('SMTP_PASS') ?? ''
+const { fromName, fromEmail } = parseFrom(
+  Deno.env.get('EMAIL_FROM') ?? 'Afrivate M&E <afrivatehr@gmail.com>',
+)
 const appUrl = (Deno.env.get('APP_URL') ?? 'http://localhost:5173').replace(/\/$/, '')
+const logoUrl = (Deno.env.get('LOGO_URL') ?? `${appUrl}/afrivate-logo.svg`).replace(/\/$/, '')
 
 function parseFrom(s: string): { fromName?: string; fromEmail: string } {
   const m = s.match(/^\s*(.*?)\s*<\s*([^>]+?)\s*>\s*$/)
   if (m) return { fromName: m[1] || undefined, fromEmail: m[2] }
   return { fromEmail: s.trim() }
+}
+
+// PostgREST may return embedded FK relations as an object or a single-item array.
+function one<T>(rel: T | T[] | null | undefined): T | null {
+  if (Array.isArray(rel)) return rel[0] ?? null
+  return rel ?? null
 }
 
 Deno.serve(async (req) => {
@@ -65,30 +75,35 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => null)
     const deploymentId = body?.deployment_id
     const expiresDays = Number(body?.expires_days ?? 14)
+    const requestedTypes = Array.isArray(body?.types) ? body.types as string[] : null
     if (!deploymentId) return json({ success: false, error: 'Missing deployment_id.' }, 400)
 
     const { data: deployment, error: depErr } = await admin
       .from('deployments')
       .select(
-        'id, role_title, start_date, end_date, volunteers ( full_name, email ), organisations ( name, contact_name, contact_email )',
+        'id, role_title, start_date, end_date, volunteer_id, organisation_id, volunteers ( full_name, email ), organisations ( name, contact_name, contact_email )',
       )
       .eq('id', deploymentId)
       .single()
 
     if (depErr || !deployment) return json({ success: false, error: 'Deployment not found.' }, 404)
 
+    const sendTypes = resolveSendTypes(deployment, requestedTypes)
+    if (!sendTypes.length) {
+      return json({ success: false, error: 'This deployment has no survey recipients configured.' }, 400)
+    }
+
     const expiresAt = new Date(deployment.end_date)
     expiresAt.setDate(expiresAt.getDate() + expiresDays)
 
-    // Reuse existing tokens (resend) or create new ones.
-    const tokens = await ensureTokens(admin, deploymentId, expiresAt.toISOString())
+    const tokens = await ensureTokens(admin, deploymentId, expiresAt.toISOString(), sendTypes)
 
     // Only invite parties whose survey instrument is currently PUBLISHED.
     const publishedTypes = await getPublishedTypes(admin)
     const isOpen = (type: string) => publishedTypes === null || publishedTypes.has(type)
 
-    const vol = deployment.volunteers
-    const org = deployment.organisations
+    const vol = one(deployment.volunteers)
+    const org = one(deployment.organisations)
     const period = `${fmt(deployment.start_date)} – ${fmt(deployment.end_date)}`
     const closesOn = fmt(expiresAt.toISOString())
 
@@ -99,50 +114,54 @@ Deno.serve(async (req) => {
     const missing: string[] = []
 
     // --- Volunteer ----------------------------------------------------------
-    if (!isOpen('volunteer')) {
-      skipped.push('volunteer')
-    } else if (!vol?.email) {
-      missing.push('volunteer')
-    } else {
-      const r = await sendEmail({
-        to: vol.email,
-        subject: `Share your Afrivate volunteer experience — ${org?.name ?? ''}`.trim(),
-        ...volunteerEmail({
-          volunteerName: vol.full_name,
-          orgName: org?.name ?? 'the organisation',
-          role: deployment.role_title,
-          period,
-          closesOn,
-          link: `${appUrl}/survey/volunteer/${tokens.volunteer}`,
-        }),
-      })
-      results.volunteer = r
-      if (r.ok) delivered.push('volunteer')
-      else failed.push({ type: 'volunteer', to: vol.email, error: humanError(r) })
+    if (sendTypes.includes('volunteer')) {
+      if (!isOpen('volunteer')) {
+        skipped.push('volunteer')
+      } else if (!vol?.email) {
+        missing.push('volunteer')
+      } else {
+        const r = await sendEmail({
+          to: vol.email,
+          subject: `Share your Afrivate volunteer experience — ${org?.name ?? ''}`.trim(),
+          ...volunteerEmail({
+            volunteerName: vol.full_name,
+            orgName: org?.name ?? 'the organisation',
+            role: deployment.role_title,
+            period,
+            closesOn,
+            link: `${appUrl}/survey/volunteer/${tokens.volunteer}`,
+          }),
+        })
+        results.volunteer = r
+        if (r.ok) delivered.push('volunteer')
+        else failed.push({ type: 'volunteer', to: vol.email, error: humanError(r) })
+      }
     }
 
     // --- Organisation -------------------------------------------------------
-    if (!isOpen('org')) {
-      skipped.push('org')
-    } else if (!org?.contact_email) {
-      missing.push('org')
-    } else {
-      const r = await sendEmail({
-        to: org.contact_email,
-        subject: `Feedback request: ${vol?.full_name ?? 'your volunteer'} | Afrivate`,
-        ...orgEmail({
-          supervisorName: org.contact_name ?? 'there',
-          volunteerName: vol?.full_name ?? 'the volunteer',
-          orgName: org.name,
-          role: deployment.role_title,
-          period,
-          closesOn,
-          link: `${appUrl}/survey/org/${tokens.org}`,
-        }),
-      })
-      results.org = r
-      if (r.ok) delivered.push('org')
-      else failed.push({ type: 'org', to: org.contact_email, error: humanError(r) })
+    if (sendTypes.includes('org')) {
+      if (!isOpen('org')) {
+        skipped.push('org')
+      } else if (!org?.contact_email) {
+        missing.push('org')
+      } else {
+        const r = await sendEmail({
+          to: org.contact_email,
+          subject: `Feedback request: ${vol?.full_name ?? 'your volunteer'} | Afrivate`,
+          ...orgEmail({
+            supervisorName: org.contact_name ?? 'there',
+            volunteerName: vol?.full_name ?? 'the volunteer',
+            orgName: org.name,
+            role: deployment.role_title,
+            period,
+            closesOn,
+            link: `${appUrl}/survey/org/${tokens.org}`,
+          }),
+        })
+        results.org = r
+        if (r.ok) delivered.push('org')
+        else failed.push({ type: 'org', to: org.contact_email, error: humanError(r) })
+      }
     }
 
     return json({ success: true, data: { tokens, results, delivered, skipped, failed, missing } })
@@ -158,10 +177,28 @@ async function getPublishedTypes(admin: ReturnType<typeof createClient>) {
   if (error || !data || data.length === 0) return null
   const set = new Set<string>()
   for (const row of data) if (row.status === 'PUBLISHED') set.add(row.key)
+  // If the table exists but nothing is published, don't block deployment emails.
+  if (set.size === 0) return null
   return set
 }
 
-async function ensureTokens(admin: ReturnType<typeof createClient>, deploymentId: string, expiresAt: string) {
+function resolveSendTypes(
+  deployment: { volunteer_id?: string | null; organisation_id?: string | null },
+  requested: string[] | null,
+) {
+  const available: string[] = []
+  if (deployment.volunteer_id) available.push('volunteer')
+  if (deployment.organisation_id) available.push('org')
+  if (!requested?.length) return available
+  return requested.filter((t) => available.includes(t))
+}
+
+async function ensureTokens(
+  admin: ReturnType<typeof createClient>,
+  deploymentId: string,
+  expiresAt: string,
+  types: string[],
+) {
   const { data: existing } = await admin
     .from('survey_tokens')
     .select('type, token')
@@ -170,35 +207,59 @@ async function ensureTokens(admin: ReturnType<typeof createClient>, deploymentId
   const map: Record<string, string> = {}
   for (const row of existing ?? []) map[row.type] = row.token
 
-  for (const type of ['volunteer', 'org']) {
+  for (const type of types) {
     if (!map[type]) {
       const token = crypto.randomUUID()
       const { error } = await admin
         .from('survey_tokens')
         .insert({ deployment_id: deploymentId, type, token, expires_at: expiresAt })
       if (!error) map[type] = token
+    } else {
+      await admin
+        .from('survey_tokens')
+        .update({ expires_at: expiresAt })
+        .eq('deployment_id', deploymentId)
+        .eq('type', type)
     }
   }
   return map
 }
 
-async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string; text?: string }) {
+async function sendEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text?: string }) {
   try {
-    const res = await fetch(`${plunkUrl}/v1/send`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${plunkKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to,
-        subject,
-        body: html,
-        from: fromEmail,
-        name: fromName,
-        subscribed: true, // transactional: do not require an opt-in contact
-      }),
+    if (!smtpUser || !smtpPass) {
+      return {
+        ok: false,
+        status: 0,
+        error: {
+          message:
+            'Email is not configured. Set SMTP_USER and SMTP_PASS (Gmail app password) on the Edge Function.',
+        },
+      }
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: { user: smtpUser, pass: smtpPass },
     })
-    const payload = await res.json().catch(() => ({}))
-    const ok = res.ok && payload?.success !== false
-    return { ok, status: res.status, id: payload?.emails?.[0]?.contact ?? payload?.id, error: ok ? undefined : payload }
+
+    const info = await transporter.sendMail({
+      from: fromName ? `"${fromName}" <${fromEmail}>` : fromEmail,
+      to,
+      subject,
+      text,
+      html,
+      replyTo: fromEmail,
+      headers: {
+        'Precedence': 'bulk',
+        'X-Auto-Response-Suppress': 'OOF, AutoReply',
+        'Auto-Submitted': 'auto-generated',
+      },
+    })
+
+    return { ok: true, status: 200, id: info.messageId }
   } catch (err) {
     return { ok: false, status: 0, error: { message: String((err as Error)?.message ?? err) } }
   }
@@ -225,42 +286,101 @@ const BRAND = {
 }
 
 function shell(opts: { preheader: string; accent: string; body: string }) {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="light"></head>
-  <body style="margin:0;padding:0;background:${BRAND.lavender};">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${opts.preheader}</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.lavender};padding:24px 12px">
-    <tr><td align="center">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 6px 24px rgba(141,64,135,0.12)">
-        <!-- Header -->
-        <tr><td style="background:${BRAND.purple};padding:28px 32px">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="font-family:Poppins,Arial,sans-serif;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:.3px">Afrivate</td>
-            <td align="right" style="font-family:Roboto,Arial,sans-serif;font-size:12px;color:rgba(255,255,255,.85)">Monitoring&nbsp;&amp;&nbsp;Evaluation</td>
-          </tr></table>
-        </td></tr>
-        <!-- Accent bar -->
-        <tr><td style="height:4px;background:${opts.accent};font-size:0;line-height:0">&nbsp;</td></tr>
-        <!-- Body -->
-        <tr><td style="padding:32px">${opts.body}</td></tr>
-        <!-- Footer -->
-        <tr><td style="padding:20px 32px;background:#FAF7FC;border-top:1px solid ${BRAND.lavender}">
-          <p style="margin:0;font-family:Roboto,Arial,sans-serif;font-size:12px;color:${BRAND.muted};line-height:1.6">
-            This is an automated message from the Afrivate Monitoring &amp; Evaluation team.<br>
-            Your responses are confidential and used only to improve volunteer placements.
-          </p>
-          <p style="margin:10px 0 0;font-family:Poppins,Arial,sans-serif;font-size:12px;color:${BRAND.purple};font-weight:600">AfriVate Technologies Ltd.</p>
-        </td></tr>
-      </table>
-      <p style="font-family:Roboto,Arial,sans-serif;font-size:11px;color:${BRAND.muted};margin:16px 0 0">© ${new Date().getFullYear()} AfriVate Technologies Ltd. · Please do not forward this link.</p>
-    </td></tr>
-  </table></body></html>`
+  const year = new Date().getFullYear()
+  return `<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Afrivate M&amp;E</title>
+  <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
+  <style type="text/css">
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+    @media only screen and (max-width: 620px) {
+      .email-container { width: 100% !important; max-width: 100% !important; }
+      .email-padding { padding: 24px 18px !important; }
+      .email-header { padding: 22px 18px !important; }
+      .email-body { padding: 24px 18px !important; }
+      .email-footer { padding: 18px !important; }
+      .logo-img { width: 120px !important; max-width: 120px !important; }
+      .btn-link { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:${BRAND.lavender};word-spacing:normal;">
+  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${opts.preheader}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.lavender};">
+    <tr>
+      <td align="center" style="padding:24px 12px;" class="email-padding">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="email-container" style="width:100%;max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td class="email-header" style="background-color:${BRAND.purple};padding:24px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="left" valign="middle">
+                    <img src="${logoUrl}" width="140" alt="Afrivate — AfriVate Technologies" class="logo-img" style="display:block;width:140px;max-width:140px;height:auto;border:0;">
+                  </td>
+                  <td align="right" valign="middle" style="font-family:Roboto,Arial,sans-serif;font-size:11px;line-height:1.4;color:rgba(255,255,255,0.9);">
+                    Monitoring&nbsp;&amp;&nbsp;Evaluation
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Accent -->
+          <tr><td style="height:4px;background-color:${opts.accent};font-size:0;line-height:0;">&nbsp;</td></tr>
+          <!-- Body -->
+          <tr>
+            <td class="email-body" style="padding:32px;font-family:Roboto,Arial,sans-serif;color:${BRAND.ink};">${opts.body}</td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td class="email-footer" style="padding:20px 32px;background-color:#FAF7FC;border-top:1px solid ${BRAND.lavender};">
+              <p style="margin:0 0 12px;font-family:Roboto,Arial,sans-serif;font-size:12px;line-height:1.65;color:${BRAND.muted};">
+                This is an automated message from the Afrivate Monitoring &amp; Evaluation team at AfriVate Technologies Ltd.
+                Your responses are confidential and used only to improve volunteer placements.
+              </p>
+              <p style="margin:0 0 12px;padding:10px 12px;background-color:#FFF8E6;border-left:3px solid #EFDA0E;font-family:Roboto,Arial,sans-serif;font-size:12px;line-height:1.6;color:${BRAND.ink};">
+                <strong>Please do not reply to this email.</strong> This inbox is not monitored. For help, contact your Afrivate M&amp;E coordinator directly.
+              </p>
+              <p style="margin:0;font-family:Poppins,Arial,sans-serif;font-size:12px;font-weight:600;color:${BRAND.purple};">AfriVate Technologies Ltd.</p>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:16px 0 0;font-family:Roboto,Arial,sans-serif;font-size:11px;line-height:1.5;color:${BRAND.muted};max-width:600px;">
+          © ${year} AfriVate Technologies Ltd. · This survey link is unique to you — please do not forward it.
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 }
 
 function button(link: string, label: string, color: string) {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0"><tr><td align="center" bgcolor="${color}" style="border-radius:10px">
-    <a href="${link}" style="display:inline-block;padding:14px 32px;font-family:Poppins,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px">${label}</a>
-  </td></tr></table>`
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:24px 0;">
+    <tr>
+      <td align="center">
+        <!--[if mso]>
+        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${link}" style="height:48px;v-text-anchor:middle;width:280px;" arcsize="12%" stroke="f" fillcolor="${color}">
+          <w:anchorlock/>
+          <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">${label}</center>
+        </v:roundrect>
+        <![endif]-->
+        <!--[if !mso]><!-->
+        <a href="${link}" class="btn-link" style="background-color:${color};border-radius:10px;color:#ffffff;display:inline-block;font-family:Poppins,Arial,sans-serif;font-size:15px;font-weight:600;line-height:48px;text-align:center;text-decoration:none;padding:0 28px;min-width:200px;">${label}</a>
+        <!--<![endif]-->
+      </td>
+    </tr>
+  </table>`
 }
 
 function infoCard(rows: [string, string][]) {
@@ -294,6 +414,8 @@ Complete your survey: ${link}
 
 This link is unique to you and closes on ${closesOn}.
 
+PLEASE DO NOT REPLY to this email. Contact your Afrivate M&E coordinator if you need help.
+
 The Afrivate M&E Team
 AfriVate Technologies Ltd.`
 
@@ -323,6 +445,8 @@ Your feedback is essential for measuring volunteer effectiveness and improving f
 Complete the assessment: ${link}
 
 This link is unique to this deployment and closes on ${closesOn}.
+
+PLEASE DO NOT REPLY to this email — this inbox is not monitored. Contact your Afrivate M&E coordinator if you need help.
 
 The Afrivate M&E Team
 AfriVate Technologies Ltd.`

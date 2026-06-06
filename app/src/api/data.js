@@ -31,26 +31,39 @@ const DEPLOYMENT_DETAIL_SELECT = `
   org_surveys ( * )
 `
 
-function normaliseDeployment(d) {
+function isSurveyRow(row) {
+  return Boolean(row && typeof row === 'object' && row.id)
+}
+
+function normaliseDeployment(d, volSurveyOverride, orgSurveyOverride) {
   const vol = one(d.volunteers)
   const org = one(d.organisations)
-  const volSurvey = one(d.volunteer_surveys)
-  const orgSurvey = one(d.org_surveys)
+  const volSurvey = volSurveyOverride ?? one(d.volunteer_surveys)
+  const orgSurvey = orgSurveyOverride ?? one(d.org_surveys)
   const tokenList = Array.isArray(d.survey_tokens) ? d.survey_tokens : []
   const tokens = {}
-  for (const t of tokenList) tokens[t.type] = t.token
+  const tokenUsed = {}
+  for (const t of tokenList) {
+    tokens[t.type] = t.token
+    tokenUsed[t.type] = Boolean(t.used)
+  }
+  const hasVolunteer = Boolean(d.volunteer_id)
+  const hasOrganisation = Boolean(d.organisation_id)
   return {
     ...d,
     tokens,
+    tokenUsed,
     volunteer: vol,
     organisation: org,
-    volSurvey,
-    orgSurvey,
+    volSurvey: isSurveyRow(volSurvey) ? volSurvey : null,
+    orgSurvey: isSurveyRow(orgSurvey) ? orgSurvey : null,
+    hasVolunteer,
+    hasOrganisation,
     volunteerName: vol?.full_name ?? '—',
     volunteerCode: vol?.volunteer_id ?? '—',
     orgName: org?.name ?? '—',
-    volSubmitted: Boolean(volSurvey),
-    orgSubmitted: Boolean(orgSurvey),
+    volSubmitted: isSurveyRow(volSurvey) || (hasVolunteer && tokenUsed.volunteer),
+    orgSubmitted: isSurveyRow(orgSurvey) || (hasOrganisation && tokenUsed.org),
     task: orgSurvey?.task_perf_avg ?? null,
     prof: orgSurvey?.professionalism_avg ?? null,
     impact: orgSurvey?.impact_avg ?? null,
@@ -60,13 +73,31 @@ function normaliseDeployment(d) {
   }
 }
 
+async function loadSurveyRowsByDeployment(ids) {
+  if (!ids.length) return { volByDep: new Map(), orgByDep: new Map() }
+  const [{ data: volRows, error: volErr }, { data: orgRows, error: orgErr }] = await Promise.all([
+    supabase.from('volunteer_surveys').select('deployment_id, id, submitted_at, volunteer_vpi, onboarding_avg, work_exp_avg, org_env_avg, s5_overall_satisfaction, s5_nps_score, s5_volunteer_again').in('deployment_id', ids),
+    supabase.from('org_surveys').select('deployment_id, id, submitted_at, supervisor_name, supervisor_title, task_perf_avg, professionalism_avg, impact_avg, org_vpi, s5_overall_effectiveness, s5_request_again, s5_request_same_vol, s6_strengths, s6_improvements').in('deployment_id', ids),
+  ])
+  if (volErr) throw volErr
+  if (orgErr) throw orgErr
+  const volByDep = new Map((volRows ?? []).map((r) => [r.deployment_id, r]))
+  const orgByDep = new Map((orgRows ?? []).map((r) => [r.deployment_id, r]))
+  return { volByDep, orgByDep }
+}
+
 export async function fetchDeployments() {
   const { data, error } = await supabase
     .from('deployments')
     .select(DEPLOYMENT_SELECT)
     .order('created_at', { ascending: false })
   if (error) throw error
-  return data.map(normaliseDeployment)
+  if (!data?.length) return []
+  const ids = data.map((d) => d.id)
+  const { volByDep, orgByDep } = await loadSurveyRowsByDeployment(ids)
+  return data.map((d) =>
+    normaliseDeployment(d, volByDep.get(d.id), orgByDep.get(d.id)),
+  )
 }
 
 export async function fetchVolunteers() {
@@ -124,20 +155,20 @@ export async function createDeployment(payload) {
   return data
 }
 
-// Generate the two survey tokens at deployment-creation time, so survey links
-// exist even before (or independent of) email delivery. Idempotent.
-export async function createSurveyTokens(deploymentId, endDate, expiresDays = 14) {
+// Generate survey tokens for the requested party types. Idempotent.
+export async function createSurveyTokens(deploymentId, endDate, expiresDays = 14, types = ['volunteer', 'org']) {
   const expires = new Date(endDate)
   expires.setDate(expires.getDate() + Number(expiresDays))
   const expiresAt = expires.toISOString()
-  const rows = ['volunteer', 'org'].map((type) => ({
+  const rows = types.map((type) => ({
     deployment_id: deploymentId,
     type,
     expires_at: expiresAt,
   }))
+  if (!rows.length) return {}
   const { error } = await supabase
     .from('survey_tokens')
-    .upsert(rows, { onConflict: 'deployment_id,type', ignoreDuplicates: true })
+    .upsert(rows, { onConflict: 'deployment_id,type' })
   if (error) throw error
   const { data } = await supabase
     .from('survey_tokens')
@@ -159,12 +190,18 @@ export async function updateDeploymentStatus(id, status) {
   return data
 }
 
-export async function sendSurveyEmails(deploymentId, expiresDays = 14) {
+// Edge functions return { success, data?, error? }; normalise like admin.js does.
+function unwrapFunctionResponse(data) {
+  if (data && data.success === false) throw new Error(data.error || 'Request failed.')
+  return data?.data ?? data ?? {}
+}
+
+export async function sendSurveyEmails(deploymentId, expiresDays = 14, types = null) {
   const { data, error } = await supabase.functions.invoke('send-survey-emails', {
-    body: { deployment_id: deploymentId, expires_days: expiresDays },
+    body: { deployment_id: deploymentId, expires_days: expiresDays, types },
   })
-  if (error) throw error
-  return data
+  if (error) throw new Error(error.message || 'Could not reach the email service.')
+  return unwrapFunctionResponse(data)
 }
 
 // --- Surveys (instrument lifecycle) -----------------------------------------

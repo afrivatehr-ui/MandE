@@ -1,3 +1,7 @@
+# Temp / CLI artifacts
+**/.temp/
+supabase/.temp/
+
 # Dependencies
 node_modules/
 
@@ -18,7 +22,3 @@ npm-debug.log*
 .DS_Store
 .vscode/
 .idea/
-
-# Temp extraction artifacts
-_pptx_extract/
-_deck.zip

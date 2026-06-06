@@ -24,6 +24,12 @@ import {
 } from '../../api/data'
 import { formatDateRange, formatVpi, STATUS_LABEL } from '../../utils/format'
 
+const SURVEY_TARGETS = [
+  { id: 'volunteer', label: 'Volunteer only', desc: 'Email the self-report survey to the volunteer (select which organisation they served at)' },
+  { id: 'organisation', label: 'Organisation only', desc: 'Email the effectiveness survey to the organisation (select which volunteer they are rating)' },
+  { id: 'both', label: 'Both parties', desc: 'Full paired deployment — both surveys; primary VPI uses the organisation rating when both are in' },
+]
+
 const FILTERS = [
   { id: 'ALL', label: 'All' },
   { id: 'ACTIVE', label: 'Active' },
@@ -67,11 +73,11 @@ export default function Deployments() {
   }, [deployments, filter])
 
   const resendMutation = useMutation({
-    mutationFn: (id) => sendSurveyEmails(id),
-    onSuccess: (res) => {
-      const d = res?.data ?? {}
-      const msg = deliveryMessage(d)
-      if (d.failed?.length || (!d.delivered?.length && (d.missing?.length || d.skipped?.length))) {
+    mutationFn: ({ id, types }) => sendSurveyEmails(id, undefined, types),
+    onSuccess: (report) => {
+      queryClient.invalidateQueries({ queryKey: ['deployments'] })
+      const msg = deliveryMessage(report ?? {})
+      if (report.failed?.length || (!report.delivered?.length && (report.missing?.length || report.skipped?.length))) {
         toast.error(msg || 'No emails were sent.')
       } else {
         toast.success(msg || 'Survey invitation emails sent.')
@@ -117,7 +123,14 @@ export default function Deployments() {
         {STATUS_LABEL[r.status]}
       </span>
     ) },
-    { key: 'surveys', header: 'Surveys', align: 'center', render: (r) => <SurveyStatus volDone={r.volSubmitted} orgDone={r.orgSubmitted} /> },
+    { key: 'surveys', header: 'Surveys', align: 'center', render: (r) => (
+      <SurveyStatus
+        volDone={r.volSubmitted}
+        orgDone={r.orgSubmitted}
+        volNa={!r.hasVolunteer}
+        orgNa={!r.hasOrganisation}
+      />
+    ) },
     { key: 'vpi', header: 'VPI', align: 'right', render: (r) => <span className="font-semibold text-afri-purple">{formatVpi(r.vpi)}</span> },
     { key: 'category', header: 'Cat.', align: 'center', render: (r) => <VPIBadge category={r.category} showLabel={false} /> },
     {
@@ -134,9 +147,24 @@ export default function Deployments() {
           </IconAction>
           {canWrite && (
             <>
-              <IconAction label="Resend survey emails" onClick={() => resendMutation.mutate(r.id)} busy={resendMutation.isPending}>
-                Resend
-              </IconAction>
+              {r.hasVolunteer && (
+                <IconAction
+                  label="Email volunteer survey"
+                  onClick={() => resendMutation.mutate({ id: r.id, types: ['volunteer'] })}
+                  busy={resendMutation.isPending}
+                >
+                  Email V
+                </IconAction>
+              )}
+              {r.hasOrganisation && (
+                <IconAction
+                  label="Email organisation survey"
+                  onClick={() => resendMutation.mutate({ id: r.id, types: ['org'] })}
+                  busy={resendMutation.isPending}
+                >
+                  Email O
+                </IconAction>
+              )}
               {r.status !== 'COMPLETED' && (
                 <IconAction label="Mark complete" onClick={() => setConfirmComplete(r)}>
                   Complete
@@ -227,6 +255,7 @@ function CreateDeploymentModal({ onClose }) {
   const { data: organisations } = useOrganisations()
   const expiryDays = useSettingsStore((st) => st.surveyTokenExpiryDays)
 
+  const [surveyTarget, setSurveyTarget] = useState('both')
   const [volMode, setVolMode] = useState('existing')
   const [orgMode, setOrgMode] = useState('existing')
   const [form, setForm] = useState({
@@ -248,6 +277,38 @@ function CreateDeploymentModal({ onClose }) {
     setNewVol({ volunteer_id: code })
   }
 
+  const includeVolunteer = surveyTarget === 'volunteer' || surveyTarget === 'both'
+  const includeOrganisation = surveyTarget === 'organisation' || surveyTarget === 'both'
+  const surveyTypes = [
+    ...(includeVolunteer ? ['volunteer'] : []),
+    ...(includeOrganisation ? ['org'] : []),
+  ]
+
+  const volSectionLabel =
+    surveyTarget === 'organisation'
+      ? 'Volunteer being assessed'
+      : surveyTarget === 'volunteer'
+        ? 'Volunteer (survey recipient)'
+        : 'Volunteer'
+  const orgSectionLabel =
+    surveyTarget === 'volunteer'
+      ? 'Organisation they served at'
+      : surveyTarget === 'organisation'
+        ? 'Organisation (survey recipient)'
+        : 'Organisation'
+  const volSectionHint =
+    surveyTarget === 'organisation'
+      ? 'Select or create the volunteer this organisation will rate.'
+      : surveyTarget === 'volunteer'
+        ? 'This person will receive the survey email.'
+        : null
+  const orgSectionHint =
+    surveyTarget === 'volunteer'
+      ? 'Select or create the partner organisation for this placement (for context in the survey).'
+      : surveyTarget === 'organisation'
+        ? 'The contact email below will receive the assessment survey.'
+        : null
+
   const createMutation = useMutation({
     mutationFn: async () => {
       let volunteerId = form.volunteer_id
@@ -267,13 +328,16 @@ function CreateDeploymentModal({ onClose }) {
         start_date: form.start_date,
         end_date: form.end_date,
       })
-      // Generate tokens (so links exist regardless of email), then email both parties.
-      await createSurveyTokens(deployment.id, form.end_date, expiryDays)
+      await createSurveyTokens(deployment.id, form.end_date, expiryDays, surveyTypes)
+      await updateDeploymentStatus(deployment.id, 'AWAITING_SURVEYS')
       let emailNote = ''
       try {
-        const res = await sendSurveyEmails(deployment.id, expiryDays)
-        const msg = deliveryMessage(res?.data ?? {})
+        const report = await sendSurveyEmails(deployment.id, expiryDays, surveyTypes)
+        const msg = deliveryMessage(report ?? {})
         if (msg) emailNote = ` ${msg}`
+        if (report.failed?.length || (!report.delivered?.length && (report.missing?.length || report.skipped?.length))) {
+          emailNote = ` ${msg || 'No emails were sent.'} You can copy survey links from the table.`
+        }
       } catch (e) {
         emailNote = ` Survey links were generated, but emails could not be sent (${e.message}). You can copy the links from the table.`
       }
@@ -283,19 +347,35 @@ function CreateDeploymentModal({ onClose }) {
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
       queryClient.invalidateQueries({ queryKey: ['volunteers'] })
       queryClient.invalidateQueries({ queryKey: ['organisations'] })
-      toast.success(`Deployment created.${emailNote}`)
+      const failed = /No emails were sent|could not be sent/i.test(emailNote)
+      if (failed) toast.error(`Deployment created.${emailNote}`)
+      else toast.success(`Deployment created.${emailNote}`)
       onClose()
     },
     onError: (e) => toast.error(`Could not create deployment: ${e.message}`),
   })
 
+  const volValid =
+    volMode === 'existing'
+      ? form.volunteer_id
+      : form.newVol.full_name && form.newVol.volunteer_id && (includeVolunteer ? form.newVol.email : true)
+  const orgValid =
+    orgMode === 'existing'
+      ? form.organisation_id
+      : form.newOrg.name && (includeOrganisation ? form.newOrg.contact_email : true)
   const valid =
     form.role_title &&
     form.start_date &&
     form.end_date &&
     form.end_date >= form.start_date &&
-    (volMode === 'existing' ? form.volunteer_id : form.newVol.full_name && form.newVol.email && form.newVol.volunteer_id) &&
-    (orgMode === 'existing' ? form.organisation_id : form.newOrg.name)
+    volValid &&
+    orgValid
+
+  const submitLabel = surveyTypes.length === 2
+    ? 'Create & send both surveys'
+    : includeVolunteer
+      ? 'Create & email volunteer'
+      : 'Create & email organisation'
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-afri-black/40 p-4" onClick={onClose}>
@@ -303,13 +383,44 @@ function CreateDeploymentModal({ onClose }) {
         <h2 className="mb-5 font-heading text-h2 text-afri-purple">New deployment</h2>
 
         <div className="flex flex-col gap-6">
-          {/* Volunteer */}
+          {/* Survey target */}
+          <fieldset>
+            <p className="mb-2 font-heading text-sm font-semibold text-afri-purple">Who should receive a survey?</p>
+            <div className="flex flex-col gap-2">
+              {SURVEY_TARGETS.map((t) => (
+                <label
+                  key={t.id}
+                  className={`flex cursor-pointer gap-3 rounded-lg border px-4 py-3 transition-colors ${
+                    surveyTarget === t.id ? 'border-afri-purple bg-afri-lavender/50' : 'border-afri-lavender hover:bg-afri-lavender/30'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="surveyTarget"
+                    value={t.id}
+                    checked={surveyTarget === t.id}
+                    onChange={() => setSurveyTarget(t.id)}
+                    className="mt-1 accent-afri-purple"
+                  />
+                  <span>
+                    <span className="block font-heading text-sm font-semibold text-afri-purple">{t.label}</span>
+                    <span className="block font-body text-xs text-afri-black/60">{t.desc}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {/* Volunteer — always required for context or as recipient */}
           <fieldset>
             <Segmented
-              label="Volunteer"
+              label={volSectionLabel}
               mode={volMode}
               setMode={(m) => { setVolMode(m); if (m === 'new' && !form.newVol.volunteer_id) suggestCode() }}
             />
+            {volSectionHint && (
+              <p className="mb-2 font-body text-xs text-afri-black/55">{volSectionHint}</p>
+            )}
             {volMode === 'existing' ? (
               <select className="afri-input" value={form.volunteer_id} onChange={(e) => set({ volunteer_id: e.target.value })}>
                 <option value="">Select a volunteer…</option>
@@ -321,15 +432,20 @@ function CreateDeploymentModal({ onClose }) {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Input label="Volunteer ID" value={form.newVol.volunteer_id} onChange={(v) => setNewVol({ volunteer_id: v })} placeholder="AV-2026-003" />
                 <Input label="Full name" value={form.newVol.full_name} onChange={(v) => setNewVol({ full_name: v })} />
-                <Input label="Email" type="email" value={form.newVol.email} onChange={(v) => setNewVol({ email: v })} />
+                {includeVolunteer && (
+                  <Input label="Email" type="email" value={form.newVol.email} onChange={(v) => setNewVol({ email: v })} />
+                )}
                 <Input label="Phone (optional)" value={form.newVol.phone} onChange={(v) => setNewVol({ phone: v })} />
               </div>
             )}
           </fieldset>
 
-          {/* Organisation */}
+          {/* Organisation — always required for context or as recipient */}
           <fieldset>
-            <Segmented label="Organisation" mode={orgMode} setMode={setOrgMode} />
+            <Segmented label={orgSectionLabel} mode={orgMode} setMode={setOrgMode} />
+            {orgSectionHint && (
+              <p className="mb-2 font-body text-xs text-afri-black/55">{orgSectionHint}</p>
+            )}
             {orgMode === 'existing' ? (
               <select className="afri-input" value={form.organisation_id} onChange={(e) => set({ organisation_id: e.target.value })}>
                 <option value="">Select an organisation…</option>
@@ -342,7 +458,9 @@ function CreateDeploymentModal({ onClose }) {
                 <Input label="Name" value={form.newOrg.name} onChange={(v) => setNewOrg({ name: v })} />
                 <Input label="Sector (optional)" value={form.newOrg.sector} onChange={(v) => setNewOrg({ sector: v })} />
                 <Input label="Contact name (optional)" value={form.newOrg.contact_name} onChange={(v) => setNewOrg({ contact_name: v })} />
-                <Input label="Contact email" type="email" value={form.newOrg.contact_email} onChange={(v) => setNewOrg({ contact_email: v })} />
+                {includeOrganisation && (
+                  <Input label="Contact email" type="email" value={form.newOrg.contact_email} onChange={(v) => setNewOrg({ contact_email: v })} />
+                )}
               </div>
             )}
           </fieldset>
@@ -363,7 +481,7 @@ function CreateDeploymentModal({ onClose }) {
         <div className="mt-6 flex justify-end gap-3">
           <button onClick={onClose} className="afri-btn-secondary" disabled={createMutation.isPending}>Cancel</button>
           <button onClick={() => createMutation.mutate()} disabled={!valid || createMutation.isPending} className="afri-btn-primary">
-            {createMutation.isPending ? <Spinner /> : 'Create & send surveys'}
+            {createMutation.isPending ? <Spinner /> : submitLabel}
           </button>
         </div>
       </div>

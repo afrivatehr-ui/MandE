@@ -217,20 +217,26 @@ export default function Settings() {
           </div>
         </section>
 
-        {/* Email & domain configuration (server-managed) */}
+        {/* Email configuration (server-managed) */}
         <section className="afri-card p-6">
-          <h2 className="mb-2 font-heading text-h3 text-afri-purple">Email &amp; domain configuration</h2>
+          <h2 className="mb-2 font-heading text-h3 text-afri-purple">Email configuration</h2>
           <p className="mb-4 font-body text-sm text-afri-black/60">
-            Email delivery (Plunk) and the public app URL are configured as Supabase Edge Function secrets, not from
-            this screen, so credentials never reach the browser.
+            Survey invitations are sent via Gmail SMTP (<code className="rounded bg-afri-lavender px-1.5 py-0.5">afrivatehr@gmail.com</code>).
+            Credentials are stored as Supabase Edge Function secrets, not in this app.
           </p>
           <ul className="flex flex-col gap-2 font-body text-sm text-afri-black/75">
-            <SecretRow name="PLUNK_API_KEY" desc="Plunk secret key (sk_…) used to send survey invitations" />
-            <SecretRow name="EMAIL_FROM" desc="Sender on a Plunk-verified domain, e.g. Afrivate M&E <surveys@afrivate.com>" />
-            <SecretRow name="APP_URL" desc="Public base URL used in survey links" />
+            <SecretRow name="SMTP_USER" desc="Gmail address, e.g. afrivatehr@gmail.com" />
+            <SecretRow name="SMTP_PASS" desc="Gmail app password (16 characters — not your login password)" />
+            <SecretRow name="EMAIL_FROM" desc="Sender shown to recipients, e.g. Afrivate M&E &lt;afrivatehr@gmail.com&gt;" />
+            <SecretRow name="APP_URL" desc="Public base URL used in survey links and email logo ({APP_URL}/afrivate-logo.svg)" />
+            <SecretRow name="LOGO_URL" desc="Optional override for logo image URL in emails (use PNG for Outlook)" />
           </ul>
           <p className="mt-4 font-body text-xs text-afri-black/45">
-            Set these with: <code className="rounded bg-afri-lavender px-1.5 py-0.5">supabase secrets set PLUNK_API_KEY=…</code>
+            Set in Supabase Dashboard → Edge Functions → Secrets. Create a Gmail app password at{' '}
+            <a href="https://myaccount.google.com/apppasswords" className="text-afri-purple underline" target="_blank" rel="noreferrer">
+              myaccount.google.com/apppasswords
+            </a>{' '}
+            (requires 2-Step Verification on the Google account).
           </p>
         </section>
       </div>

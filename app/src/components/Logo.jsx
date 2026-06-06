@@ -1,21 +1,19 @@
-import logoPurple from '../assets/logo/logo-purple.png'
-import logoWhite from '../assets/logo/logo-white.png'
 import iconPurple from '../assets/logo/icon-purple.svg'
-import iconWhite from '../assets/logo/icon-white.png'
 
 /**
- * Brand-correct logo. Pick the variant by background (spec Section 3.5):
- *   purple/dark background -> variant="white"
+ * Brand logo. Uses the Afrivate icon SVG (PNG wordmarks are optional assets).
+ *   purple/dark background -> variant="white" (inverted icon)
  *   white/lavender background -> variant="purple"
- * Use iconOnly for compact spaces / favicons / badges.
  */
 export default function Logo({ variant = 'purple', iconOnly = false, className = '' }) {
-  const src = iconOnly
-    ? variant === 'white'
-      ? iconWhite
-      : iconPurple
-    : variant === 'white'
-      ? logoWhite
-      : logoPurple
-  return <img src={src} alt="Afrivate" className={className} draggable={false} />
+  const invert = variant === 'white'
+  return (
+    <img
+      src={iconPurple}
+      alt="Afrivate"
+      className={`${invert ? 'brightness-0 invert' : ''} ${className}`.trim()}
+      draggable={false}
+      style={iconOnly ? undefined : { maxHeight: '2.5rem', width: 'auto' }}
+    />
+  )
 }
