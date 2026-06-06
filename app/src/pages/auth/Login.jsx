@@ -17,6 +17,7 @@ export default function Login() {
   const [magicSent, setMagicSent] = useState(false)
 
   const from = location.state?.from || '/dashboard'
+  const idleLogout = location.state?.reason === 'idle'
 
   if (!loading && session) return <Navigate to={from} replace />
 
@@ -66,6 +67,12 @@ export default function Login() {
   return (
     <AuthCard>
       <h1 className="font-heading text-h2 text-afri-purple">Sign in</h1>
+
+      {idleLogout && (
+        <div className="mt-4 rounded-lg border border-afri-purple/25 bg-afri-lavender/50 px-4 py-3 text-sm text-afri-black/75">
+          Your session ended after 10 minutes of inactivity. Please sign in again.
+        </div>
+      )}
 
       <div className="mt-4 flex rounded-lg border border-afri-lavender bg-afri-lavender/40 p-1">
         <button

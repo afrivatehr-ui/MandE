@@ -12,8 +12,26 @@ if (!isSupabaseConfigured) {
   )
 }
 
+/** Remove old localStorage sessions so closing-tab / session-only auth is enforced. */
+export function clearLegacyAuthStorage() {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+      const key = localStorage.key(i)
+      if (key?.startsWith('sb-') && key.includes('auth')) {
+        localStorage.removeItem(key)
+      }
+    }
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
+clearLegacyAuthStorage()
+
 export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
   auth: {
+    // sessionStorage: session ends when the browser tab/window is closed.
+    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,

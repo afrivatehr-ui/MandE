@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore, isAdmin, isWriter } from '../../store/authStore'
+import { useIdleLogout } from '../../hooks/useIdleLogout'
 import Logo from '../Logo'
 
 const NAV = [
@@ -16,6 +17,8 @@ export default function AppLayout() {
   const { profile, signOut } = useAuthStore()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+
+  useIdleLogout()
 
   const role = profile?.role
   const nav = [
