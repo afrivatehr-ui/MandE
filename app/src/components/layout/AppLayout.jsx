@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore, isAdmin, isWriter } from '../../store/authStore'
 import Logo from '../Logo'
-import ThemeToggle from '../ThemeToggle'
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: GridIcon },
@@ -37,21 +36,18 @@ export default function AppLayout() {
     .toUpperCase()
 
   return (
-    <div className="min-h-screen bg-afri-lavender/40 lg:flex dark:bg-afri-purple-deep">
+    <div className="min-h-screen bg-afri-lavender/40 lg:flex">
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-40 flex items-center justify-between bg-afri-purple px-4 py-3 lg:hidden dark:bg-afri-purple-surface">
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-afri-purple px-4 py-3 lg:hidden">
         <Logo variant="white" className="h-8" />
-        <div className="flex items-center gap-1">
-          <ThemeToggle className="text-afri-white/90 hover:bg-afri-white/10" />
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="rounded-lg p-2 text-afri-white hover:bg-afri-white/10"
-            aria-label="Toggle navigation"
-          >
-            <MenuIcon />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="rounded-lg p-2 text-afri-white hover:bg-afri-white/10"
+          aria-label="Toggle navigation"
+        >
+          <MenuIcon />
+        </button>
       </header>
 
       {/* Mobile nav overlay */}
@@ -66,7 +62,7 @@ export default function AppLayout() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 transform bg-afri-purple transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:block lg:h-screen lg:w-64 lg:shrink-0 lg:translate-x-0 dark:bg-afri-purple-surface ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 transform bg-afri-purple transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:block lg:h-screen lg:w-64 lg:shrink-0 lg:translate-x-0 ${
           open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -96,7 +92,7 @@ export default function AppLayout() {
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-lg px-3 py-2.5 font-body text-sm transition-colors ${
                     isActive
-                      ? 'bg-afri-white font-medium text-afri-purple dark:bg-afri-lavender dark:text-afri-purple-deep'
+                      ? 'bg-afri-white font-medium text-afri-purple'
                       : 'text-afri-white/85 hover:bg-afri-white/10'
                   }`
                 }
@@ -108,9 +104,6 @@ export default function AppLayout() {
           </nav>
 
           <div className="border-t border-afri-white/15 p-3">
-            <div className="mb-2 hidden lg:block">
-              <ThemeToggle className="w-full justify-center text-afri-white/85 hover:bg-afri-white/10" />
-            </div>
             <div className="flex items-center gap-3 px-2 py-2">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-afri-white/15 font-heading text-sm font-semibold text-afri-white">
                 {initials}

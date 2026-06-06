@@ -12,12 +12,19 @@ function effectiveCategory(d) {
 
 /** Likert dimensions for radar charts — org survey preferred, volunteer proxies as fallback. */
 function deploymentDimensions(d) {
-  if (d.orgSurvey && d.task != null) {
-    return {
-      task: Number(d.task),
-      prof: Number(d.prof),
-      impact: Number(d.impact),
-      overall: Number(d.overall) / 2,
+  const os = d.orgSurvey
+  if (os) {
+    const task = d.task ?? os.task_perf_avg
+    const prof = d.prof ?? os.professionalism_avg
+    const impact = d.impact ?? os.impact_avg
+    const overall = d.overall ?? os.s5_overall_effectiveness
+    if (task != null && prof != null && impact != null && overall != null) {
+      return {
+        task: Number(task),
+        prof: Number(prof),
+        impact: Number(impact),
+        overall: Number(overall) / 2,
+      }
     }
   }
   const vs = d.volSurvey
@@ -30,6 +37,26 @@ function deploymentDimensions(d) {
     }
   }
   return null
+}
+
+/** Pull supervisor quotes from org survey open-feedback fields. */
+export function supervisorHighlights(deployments, limit = 6) {
+  const items = []
+  for (const d of deployments) {
+    const s = d.orgSurvey
+    if (!s) continue
+    const who = s.supervisor_name || 'Supervisor'
+    if (s.s6_strengths?.trim()) {
+      items.push({ text: s.s6_strengths.trim(), from: who, label: 'Strengths' })
+    }
+    if (s.s6_improvements?.trim()) {
+      items.push({ text: s.s6_improvements.trim(), from: who, label: 'Areas to develop' })
+    }
+    if (s.s6_other_feedback?.trim()) {
+      items.push({ text: s.s6_other_feedback.trim(), from: who, label: 'Feedback' })
+    }
+  }
+  return items.slice(0, limit)
 }
 
 export function summarise(deployments) {
@@ -55,7 +82,7 @@ export function summarise(deployments) {
 
 export function dimensionAverages(deployments) {
   const dims = { task: [], prof: [], impact: [], overall: [] }
-  for (const d of scoredDeployments(deployments)) {
+  for (const d of deployments) {
     const row = deploymentDimensions(d)
     if (!row) continue
     dims.task.push(row.task)

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader'
 import DataTable from '../../components/DataTable'
+import { OrganisationMobileList } from '../../components/mobile/MobileCards'
 import VPIBadge from '../../components/VPIBadge'
 import EmptyState from '../../components/EmptyState'
 import Spinner from '../../components/Spinner'
@@ -46,13 +47,23 @@ export default function OrganisationsList() {
   return (
     <div>
       <PageHeader title="Organisations" subtitle="Partner performance, ranked by average VPI" />
-      <DataTable
-        columns={columns}
-        rows={rows}
-        rowKey={(r) => r.id}
-        onRowClick={(r) => navigate(`/organisations/${r.id}`)}
-        emptyState={<EmptyState title="No organisations yet" description="Organisations appear here once they host a deployment." />}
-      />
+      {!rows.length ? (
+        <EmptyState title="No organisations yet" description="Organisations appear here once they host a deployment." />
+      ) : (
+        <>
+          <div className="md:hidden">
+            <OrganisationMobileList rows={rows} onSelect={(r) => navigate(`/organisations/${r.id}`)} />
+          </div>
+          <div className="hidden md:block">
+            <DataTable
+              columns={columns}
+              rows={rows}
+              rowKey={(r) => r.id}
+              onRowClick={(r) => navigate(`/organisations/${r.id}`)}
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }

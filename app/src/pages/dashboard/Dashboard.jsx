@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useThemeColors } from '../../hooks/useThemeColors'
 import {
   ResponsiveContainer,
   BarChart,
@@ -33,7 +32,6 @@ import { formatVpi, formatDateTime } from '../../utils/format'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const colors = useThemeColors()
   const { data: deployments, isLoading, error } = useAllDeployments()
 
   const derived = useMemo(() => {
@@ -92,9 +90,9 @@ export default function Dashboard() {
               {distribution.length ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={distribution} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: colors.tick }} interval={0} angle={-15} textAnchor="end" height={50} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: colors.tick }} />
-                    <Tooltip formatter={(v) => `${v}%`} cursor={{ fill: colors.tooltipCursor }} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#000' }} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#000' }} />
+                    <Tooltip formatter={(v) => `${v}%`} cursor={{ fill: '#F0E7F6' }} />
                     <Bar dataKey="vpi" radius={[6, 6, 0, 0]}>
                       {distribution.map((entry) => (
                         <Cell key={entry.name} fill={categoryHex[entry.category]} />
@@ -112,10 +110,10 @@ export default function Dashboard() {
               {dims?.length ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <RadarChart data={dims} outerRadius={100}>
-                    <PolarGrid stroke={colors.grid} />
-                    <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: colors.tick }} />
-                    <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: colors.radarStroke }} />
-                    <Radar dataKey="value" stroke={colors.radarStroke} fill={colors.radarFill} fillOpacity={0.4} />
+                    <PolarGrid stroke="#E3D4EC" />
+                    <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12, fill: '#000' }} />
+                    <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10, fill: '#8D4087' }} />
+                    <Radar dataKey="value" stroke="#8D4087" fill="#8D4087" fillOpacity={0.4} />
                     <Tooltip formatter={(v) => `${v} / 5`} />
                   </RadarChart>
                 </ResponsiveContainer>

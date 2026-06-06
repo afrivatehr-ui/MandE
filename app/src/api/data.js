@@ -95,7 +95,7 @@ async function loadSurveyRowsByDeployment(ids) {
   if (!ids.length) return { volByDep: new Map(), orgByDep: new Map() }
   const [{ data: volRows, error: volErr }, { data: orgRows, error: orgErr }] = await Promise.all([
     supabase.from('volunteer_surveys').select('deployment_id, id, submitted_at, volunteer_vpi, onboarding_avg, work_exp_avg, org_env_avg, s5_overall_satisfaction, s5_nps_score, s5_volunteer_again').in('deployment_id', ids),
-    supabase.from('org_surveys').select('deployment_id, id, submitted_at, supervisor_name, supervisor_title, task_perf_avg, professionalism_avg, impact_avg, org_vpi, s5_overall_effectiveness, s5_request_again, s5_request_same_vol, s6_strengths, s6_improvements').in('deployment_id', ids),
+    supabase.from('org_surveys').select('deployment_id, id, submitted_at, supervisor_name, supervisor_title, task_perf_avg, professionalism_avg, impact_avg, org_vpi, s5_overall_effectiveness, s5_request_again, s5_request_same_vol, s6_strengths, s6_improvements, s6_other_feedback, s6_afrivate_improvements').in('deployment_id', ids),
   ])
   if (volErr) throw volErr
   if (orgErr) throw orgErr

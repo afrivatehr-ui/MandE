@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader'
 import DataTable from '../../components/DataTable'
+import { VolunteerMobileList } from '../../components/mobile/MobileCards'
 import ScoreBar from '../../components/ScoreBar'
 import VPIBadge from '../../components/VPIBadge'
 import ActionFlag from '../../components/ActionFlag'
@@ -143,20 +144,26 @@ export default function VolunteersList() {
         </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        rows={rows}
-        rowKey={(r) => r.id}
-        mobilePrimaryKeys={['volunteerName', 'orgName']}
-        hideOnMobile={['task', 'prof', 'impact', 'flag']}
-        onRowClick={(r) => navigate(`/volunteers/${r.volunteer_id}`)}
-        emptyState={
-          <EmptyState
-            title="No volunteers match"
-            description="Try adjusting your filters, or create a deployment to start tracking volunteers."
-          />
-        }
-      />
+      {!rows.length ? (
+        <EmptyState
+          title="No volunteers match"
+          description="Try adjusting your filters, or create a deployment to start tracking volunteers."
+        />
+      ) : (
+        <>
+          <div className="md:hidden">
+            <VolunteerMobileList rows={rows} onSelect={(r) => navigate(`/volunteers/${r.volunteer_id}`)} />
+          </div>
+          <div className="hidden md:block">
+            <DataTable
+              columns={columns}
+              rows={rows}
+              rowKey={(r) => r.id}
+              onRowClick={(r) => navigate(`/volunteers/${r.volunteer_id}`)}
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -9,6 +9,7 @@ import EmptyState from '../../components/EmptyState'
 import Spinner from '../../components/Spinner'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import DeploymentActions from '../../components/DeploymentActions'
+import { DeploymentMobileList } from '../../components/mobile/MobileCards'
 import { ErrorNote } from '../dashboard/Dashboard'
 import { useDeployments, useVolunteers, useOrganisations } from '../../hooks/useData'
 import { useAuthStore, isWriter } from '../../store/authStore'
@@ -136,7 +137,7 @@ export default function Deployments() {
     { key: 'period', header: 'Period', render: (r) => <span className="text-xs">{formatDateRange(r.start_date, r.end_date)}</span> },
     {
       key: 'status', header: 'Status', render: (r) => (
-        <span className="rounded-full bg-afri-lavender px-2.5 py-1 font-body text-xs text-afri-purple dark:bg-afri-purple-light/30 dark:text-afri-lavender">
+        <span className="rounded-full bg-afri-lavender px-2.5 py-1 font-body text-xs text-afri-purple">
           {STATUS_LABEL[r.status]}
         </span>
       )
@@ -193,8 +194,8 @@ export default function Deployments() {
             onClick={() => setFilter(f.id)}
             className={`rounded-lg px-3 py-1.5 font-body text-sm transition-colors ${
               filter === f.id
-                ? 'bg-afri-purple text-afri-white dark:bg-afri-lavender dark:text-afri-purple-deep'
-                : 'bg-afri-lavender text-afri-purple hover:bg-afri-lavender/70 dark:bg-afri-purple-surface dark:text-afri-lavender dark:hover:bg-afri-purple-light/30'
+                ? 'bg-afri-purple text-afri-white'
+                : 'bg-afri-lavender text-afri-purple hover:bg-afri-lavender/70'
             }`}
           >
             {f.label}
@@ -202,19 +203,31 @@ export default function Deployments() {
         ))}
       </div>
 
-      <DataTable
-        columns={columns}
-        rows={rows}
-        rowKey={(r) => r.id}
-        mobilePrimaryKeys={['volunteerName', 'orgName']}
-        emptyState={
-          <EmptyState
-            title="No deployments"
-            description={canWrite ? 'Create a deployment to send surveys and generate scores.' : 'No deployments to show yet.'}
-            cta={canWrite && <button onClick={() => setShowCreate(true)} className="afri-btn-primary">+ New deployment</button>}
-          />
-        }
-      />
+      {!rows.length ? (
+        <EmptyState
+          title="No deployments"
+          description={canWrite ? 'Create a deployment to send surveys and generate scores.' : 'No deployments to show yet.'}
+          cta={canWrite && <button onClick={() => setShowCreate(true)} className="afri-btn-primary">+ New deployment</button>}
+        />
+      ) : (
+        <>
+          <div className="md:hidden">
+            <DeploymentMobileList
+              rows={rows}
+              canWrite={canWrite}
+              emailBusy={resendMutation.isPending}
+              onView={(r) => navigate(`/volunteers/${r.volunteer_id}`)}
+              onCopyLinks={copyLinks}
+              onSendEmail={(r, types) => resendMutation.mutate({ id: r.id, types })}
+              onComplete={setConfirmComplete}
+              onRemove={setConfirmDelete}
+            />
+          </div>
+          <div className="hidden md:block">
+            <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} />
+          </div>
+        </>
+      )}
 
       {showCreate && <CreateDeploymentModal onClose={() => setShowCreate(false)} />}
 
