@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import PageHeader from '../../components/PageHeader'
-import PasswordInput from '../../components/PasswordInput'
 import Spinner from '../../components/Spinner'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { ErrorNote } from '../dashboard/Dashboard'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore, ROLE_LABELS } from '../../store/authStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { toast } from '../../store/toastStore'
 import { fetchUsers, updateUserRole, adminCreateUser, adminDeleteUser, fetchAccessRequests, approveAccessRequest, rejectAccessRequest } from '../../api/admin'
@@ -38,29 +37,32 @@ export default function Settings() {
 
   const createMutation = useMutation({
     mutationFn: adminCreateUser,
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
-      toast.success('User invited.')
+      if (result?.warning) toast.error(result.warning)
+      else toast.success('User invited — login details emailed with password change instructions.')
     },
     onError: (e) => toast.error(e.message),
   })
 
   const deleteMutation = useMutation({
     mutationFn: adminDeleteUser,
-    onSuccess: () => {
+    onSuccess: (_data, userId) => {
+      queryClient.setQueryData(['users'], (old) => (old ?? []).filter((u) => u.id !== userId))
       queryClient.invalidateQueries({ queryKey: ['users'] })
       toast.success('User removed.')
       setConfirmRemove(null)
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message || 'Could not remove this user. Please try again.'),
   })
 
   const approveMutation = useMutation({
     mutationFn: ({ requestId, role }) => approveAccessRequest(requestId, role),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['accessRequests'] })
       queryClient.invalidateQueries({ queryKey: ['users'] })
-      toast.success('Access approved.')
+      if (result?.warning) toast.error(result.warning)
+      else toast.success('Access approved — login details emailed with password change instructions.')
     },
     onError: (e) => toast.error(e.message),
   })
@@ -76,10 +78,9 @@ export default function Settings() {
 
   return (
     <div>
-      <PageHeader title="Settings" subtitle="Administrator configuration" />
+      <PageHeader title="Settings" subtitle="Manage users and survey preferences" />
 
       <div className="flex flex-col gap-6">
-        {/* Access requests */}
         {accessRequests.length > 0 && (
           <section className="afri-card border-l-4 border-afri-orange p-6">
             <h2 className="mb-4 font-heading text-h3 text-afri-orange">Pending access requests ({accessRequests.length})</h2>
@@ -90,7 +91,9 @@ export default function Settings() {
                     <p className="font-semibold text-afri-purple">{req.name}</p>
                     <p className="text-sm text-afri-black/60">{req.email}</p>
                     {req.organisation && <p className="text-xs text-afri-black/50">{req.organisation}</p>}
-                    <p className="mt-1 text-xs font-medium text-afri-orange">Requested: {req.role_requested}</p>
+                    <p className="mt-1 text-xs font-medium text-afri-orange">
+                      Requested: {ROLE_LABELS[req.role_requested] ?? req.role_requested}
+                    </p>
                   </div>
                   <div className="flex gap-2">
                     <select
@@ -98,9 +101,9 @@ export default function Settings() {
                       defaultValue={req.role_requested}
                       className="afri-input !w-auto !py-1.5 text-sm"
                     >
-                      <option value="VIEWER">VIEWER</option>
-                      <option value="HR">HR</option>
-                      <option value="ADMIN">ADMIN</option>
+                      {ROLES.map((r) => (
+                        <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                      ))}
                     </select>
                     <button
                       onClick={() => {
@@ -127,7 +130,6 @@ export default function Settings() {
           </section>
         )}
 
-        {/* User management */}
         <section className="afri-card p-6">
           <h2 className="mb-4 font-heading text-h3 text-afri-purple">User management</h2>
 
@@ -167,7 +169,7 @@ export default function Settings() {
                           className="afri-input !w-auto !py-1.5"
                         >
                           {ROLES.map((r) => (
-                            <option key={r} value={r}>{r}</option>
+                            <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                           ))}
                         </select>
                       </td>
@@ -188,11 +190,10 @@ export default function Settings() {
           <InviteForm onInvite={(payload) => createMutation.mutate(payload)} busy={createMutation.isPending} />
         </section>
 
-        {/* Survey token expiry */}
         <section className="afri-card p-6">
-          <h2 className="mb-2 font-heading text-h3 text-afri-purple">Survey token expiry</h2>
+          <h2 className="mb-2 font-heading text-h3 text-afri-purple">Survey link expiry</h2>
           <p className="mb-4 font-body text-sm text-afri-black/60">
-            How many days after a deployment's end date survey links remain valid. Applied to new deployments.
+            How many days after a deployment ends survey links stay active. This applies to new deployments.
           </p>
           <div className="flex items-end gap-3">
             <div>
@@ -217,37 +218,6 @@ export default function Settings() {
             </button>
           </div>
         </section>
-
-        {/* Email configuration (server-managed) */}
-        <section className="afri-card p-6">
-          <h2 className="mb-2 font-heading text-h3 text-afri-purple">Email configuration</h2>
-          <p className="mb-4 font-body text-sm text-afri-black/60">
-            Survey invitations and auth emails (confirm email, password reset, magic link) are sent via Gmail SMTP.
-            Credentials are stored as Supabase Edge Function secrets, not in this app.
-          </p>
-          <ul className="flex flex-col gap-2 font-body text-sm text-afri-black/75">
-            <SecretRow name="SMTP_USER" desc="Gmail address, e.g. afrivatehr@gmail.com" />
-            <SecretRow name="SMTP_PASS" desc="Gmail app password (16 characters — not your login password)" />
-            <SecretRow name="EMAIL_FROM" desc="Sender shown to recipients, e.g. Afrivate M&E &lt;afrivatehr@gmail.com&gt;" />
-            <SecretRow name="APP_URL" desc="Public site URL (survey links + default logo path)" />
-            <SecretRow name="LOGO_URL" desc="Optional logo URL for emails (default: {APP_URL}/logos/afrivate-full-logo-purple.png)" />
-            <SecretRow name="SEND_EMAIL_HOOK_SECRET" desc="Auth hook secret — set on send-auth-email function after enabling Send Email hook in Supabase Auth" />
-          </ul>
-          <p className="mt-4 font-body text-xs text-afri-black/45">
-            Set secrets in Supabase Dashboard → Edge Functions → Secrets. Enable branded auth emails under
-            Authentication → Hooks → Send Email → HTTPS URL:{' '}
-            <code className="rounded bg-afri-lavender px-1">…/functions/v1/send-auth-email</code>.
-            Add redirect URLs in Authentication → URL Configuration:{' '}
-            <code className="rounded bg-afri-lavender px-1">/reset-password</code>,{' '}
-            <code className="rounded bg-afri-lavender px-1">/dashboard</code>,{' '}
-            <code className="rounded bg-afri-lavender px-1">/login</code>.
-            Gmail app password:{' '}
-            <a href="https://myaccount.google.com/apppasswords" className="text-afri-purple underline" target="_blank" rel="noreferrer">
-              myaccount.google.com/apppasswords
-            </a>{' '}
-            (requires 2-Step Verification on the Google account).
-          </p>
-        </section>
       </div>
 
       <ConfirmDialog
@@ -264,39 +234,25 @@ export default function Settings() {
   )
 }
 
-function SecretRow({ name, desc }) {
-  return (
-    <li className="flex flex-col gap-0.5 border-b border-afri-lavender/60 pb-2">
-      <code className="font-heading text-sm text-afri-purple">{name}</code>
-      <span className="text-xs text-afri-black/55">{desc}</span>
-    </li>
-  )
-}
-
 function InviteForm({ onInvite, busy }) {
-  const [form, setForm] = useState({ name: '', email: '', role: 'VIEWER', password: '' })
+  const [form, setForm] = useState({ name: '', email: '', role: 'VIEWER' })
   const set = (patch) => setForm((f) => ({ ...f, ...patch }))
-  const valid = form.name && form.email && form.password.length >= 8
+  const valid = form.name && form.email
 
   return (
     <div className="mt-6 border-t border-afri-lavender pt-5">
-      <h3 className="mb-3 font-heading text-sm font-semibold text-afri-purple">Invite a new user</h3>
+      <h3 className="mb-1 font-heading text-sm font-semibold text-afri-purple">Invite a new user</h3>
+      <p className="mb-3 font-body text-xs text-afri-black/55">
+        An email with login details will be sent automatically. They will be asked to change their password after signing in.
+      </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input className="afri-input" placeholder="Full name" value={form.name} onChange={(e) => set({ name: e.target.value })} />
         <input className="afri-input" type="email" placeholder="Email" value={form.email} onChange={(e) => set({ email: e.target.value })} />
-        <select className="afri-input" value={form.role} onChange={(e) => set({ role: e.target.value })}>
+        <select className="afri-input sm:col-span-2" value={form.role} onChange={(e) => set({ role: e.target.value })}>
           {ROLES.map((r) => (
-            <option key={r} value={r}>{r}</option>
+            <option key={r} value={r}>{ROLE_LABELS[r]}</option>
           ))}
         </select>
-        <PasswordInput
-          id="invite-password"
-          showLabel={false}
-          placeholder="Temp password (min 8)"
-          autoComplete="new-password"
-          value={form.password}
-          onChange={(e) => set({ password: e.target.value })}
-        />
       </div>
       <button onClick={() => valid && onInvite(form)} disabled={!valid || busy} className="afri-btn-primary mt-3">
         {busy ? <Spinner /> : 'Invite user'}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import PageHeader from '../../components/PageHeader'
@@ -30,7 +30,7 @@ import { formatDateRange, formatVpi, STATUS_LABEL } from '../../utils/format'
 const SURVEY_TARGETS = [
   { id: 'volunteer', label: 'Volunteer only', desc: 'Email the self-report survey to the volunteer (select which organisation they served at)' },
   { id: 'organisation', label: 'Organisation only', desc: 'Email the effectiveness survey to the organisation (select which volunteer they are rating)' },
-  { id: 'both', label: 'Both parties', desc: 'Full paired deployment — both surveys; primary VPI uses the organisation rating when both are in' },
+  { id: 'both', label: 'Both parties', desc: 'Send surveys to both the volunteer and the organisation. When both are completed, the organisation rating is used as the main score.' },
 ]
 
 const FILTERS = [
@@ -153,7 +153,7 @@ export default function Deployments() {
       )
     },
     { key: 'vpi', header: 'VPI', align: 'right', render: (r) => <span className="font-semibold text-afri-purple">{formatVpi(r.vpi)}</span> },
-    { key: 'category', header: 'Cat.', align: 'center', render: (r) => <VPIBadge category={r.category} showLabel={false} /> },
+    { key: 'category', header: 'Grade', align: 'center', render: (r) => <VPIBadge category={r.category} showLabel={false} /> },
     {
       key: 'actions',
       header: 'Actions',
@@ -268,8 +268,9 @@ function CreateDeploymentModal({ onClose }) {
     volunteer_id: '',
     newVol: { volunteer_id: '', full_name: '', email: '', phone: '' },
     organisation_id: '',
-    newOrg: { name: '', contact_name: '', contact_email: '', sector: '' },
+    newOrg: { name: '', contact_name: '', contact_email: '', contact_title: '', sector: '' },
     role_title: '',
+    org_contact_role: '',
     start_date: '',
     end_date: '',
   })
@@ -278,10 +279,11 @@ function CreateDeploymentModal({ onClose }) {
   const setNewVol = (patch) => setForm((f) => ({ ...f, newVol: { ...f.newVol, ...patch } }))
   const setNewOrg = (patch) => setForm((f) => ({ ...f, newOrg: { ...f.newOrg, ...patch } }))
 
-  async function suggestCode() {
-    const code = await nextVolunteerCode()
-    setNewVol({ volunteer_id: code })
-  }
+  useEffect(() => {
+    if (volMode === 'new' && !form.newVol.volunteer_id) {
+      nextVolunteerCode().then((code) => setNewVol({ volunteer_id: code }))
+    }
+  }, [volMode, form.newVol.volunteer_id])
 
   const includeVolunteer = surveyTarget === 'volunteer' || surveyTarget === 'both'
   const includeOrganisation = surveyTarget === 'organisation' || surveyTarget === 'both'
@@ -331,6 +333,7 @@ function CreateDeploymentModal({ onClose }) {
         volunteer_id: volunteerId,
         organisation_id: organisationId,
         role_title: form.role_title,
+        org_contact_role: form.org_contact_role || null,
         start_date: form.start_date,
         end_date: form.end_date,
         survey_target: surveyTarget,
@@ -366,13 +369,14 @@ function CreateDeploymentModal({ onClose }) {
   const volValid =
     volMode === 'existing'
       ? form.volunteer_id
-      : form.newVol.full_name && form.newVol.volunteer_id && (includeVolunteer ? form.newVol.email : true)
+      : form.newVol.full_name && (includeVolunteer ? form.newVol.email : true)
   const orgValid =
     orgMode === 'existing'
       ? form.organisation_id
       : form.newOrg.name && (includeOrganisation ? form.newOrg.contact_email : true)
   const valid =
     form.role_title &&
+    form.org_contact_role &&
     form.start_date &&
     form.end_date &&
     form.end_date >= form.start_date &&
@@ -423,7 +427,7 @@ function CreateDeploymentModal({ onClose }) {
             <Segmented
               label={volSectionLabel}
               mode={volMode}
-              setMode={(m) => { setVolMode(m); if (m === 'new' && !form.newVol.volunteer_id) suggestCode() }}
+              setMode={setVolMode}
             />
             {volSectionHint && (
               <p className="mb-2 font-body text-xs text-afri-black/55">{volSectionHint}</p>
@@ -437,7 +441,13 @@ function CreateDeploymentModal({ onClose }) {
               </select>
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Input label="Volunteer ID" value={form.newVol.volunteer_id} onChange={(v) => setNewVol({ volunteer_id: v })} placeholder="AV-2026-003" />
+                <div>
+                  <label className="afri-label">Volunteer ID</label>
+                  <div className="afri-input bg-afri-lavender/60 font-mono text-afri-black/80">
+                    {form.newVol.volunteer_id || 'Assigning…'}
+                  </div>
+                  <p className="mt-1 font-body text-xs text-afri-black/50">Auto-assigned permanently for records.</p>
+                </div>
                 <Input label="Full name" value={form.newVol.full_name} onChange={(v) => setNewVol({ full_name: v })} />
                 {includeVolunteer && (
                   <Input label="Email" type="email" value={form.newVol.email} onChange={(v) => setNewVol({ email: v })} />
@@ -454,7 +464,18 @@ function CreateDeploymentModal({ onClose }) {
               <p className="mb-2 font-body text-xs text-afri-black/55">{orgSectionHint}</p>
             )}
             {orgMode === 'existing' ? (
-              <select className="afri-input" value={form.organisation_id} onChange={(e) => set({ organisation_id: e.target.value })}>
+              <select
+                className="afri-input"
+                value={form.organisation_id}
+                onChange={(e) => {
+                  const id = e.target.value
+                  const org = (organisations ?? []).find((o) => o.id === id)
+                  set({
+                    organisation_id: id,
+                    org_contact_role: org?.contact_title || form.org_contact_role,
+                  })
+                }}
+              >
                 <option value="">Select an organisation…</option>
                 {(organisations ?? []).map((o) => (
                   <option key={o.id} value={o.id}>{o.name}</option>
@@ -465,6 +486,7 @@ function CreateDeploymentModal({ onClose }) {
                 <Input label="Name" value={form.newOrg.name} onChange={(v) => setNewOrg({ name: v })} />
                 <Input label="Sector (optional)" value={form.newOrg.sector} onChange={(v) => setNewOrg({ sector: v })} />
                 <Input label="Contact name (optional)" value={form.newOrg.contact_name} onChange={(v) => setNewOrg({ contact_name: v })} />
+                <Input label="Contact role / job title" value={form.newOrg.contact_title} onChange={(v) => setNewOrg({ contact_title: v })} placeholder="e.g. Engineering Lead" />
                 {includeOrganisation && (
                   <Input label="Contact email" type="email" value={form.newOrg.contact_email} onChange={(v) => setNewOrg({ contact_email: v })} />
                 )}
@@ -473,10 +495,9 @@ function CreateDeploymentModal({ onClose }) {
           </fieldset>
 
           {/* Deployment details */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="sm:col-span-3">
-              <Input label="Role / Assignment title" value={form.role_title} onChange={(v) => set({ role_title: v })} />
-            </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Volunteer role / assignment" value={form.role_title} onChange={(v) => set({ role_title: v })} placeholder="e.g. Data Analyst Intern" />
+            <Input label="Organisation contact role" value={form.org_contact_role} onChange={(v) => set({ org_contact_role: v })} placeholder="e.g. Volunteer Programme Lead" />
             <Input label="Start date" type="date" value={form.start_date} onChange={(v) => set({ start_date: v })} />
             <Input label="End date" type="date" value={form.end_date} onChange={(v) => set({ end_date: v })} />
           </div>

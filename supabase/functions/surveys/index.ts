@@ -215,7 +215,7 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
   const { data: deployment } = await supabase
     .from('deployments')
     .select(
-      'id, role_title, start_date, end_date, volunteers ( volunteer_id, full_name ), organisations ( name )',
+      'id, role_title, org_contact_role, start_date, end_date, volunteers ( volunteer_id, full_name ), organisations ( name )',
     )
     .eq('id', tokenRow.deployment_id)
     .single()
@@ -254,6 +254,7 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
     deployment: {
       id: deployment.id,
       role_title: deployment.role_title,
+      org_contact_role: deployment.org_contact_role,
       start_date: deployment.start_date,
       end_date: deployment.end_date,
     },

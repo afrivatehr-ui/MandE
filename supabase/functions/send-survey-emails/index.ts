@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     const { data: deployment, error: depErr } = await admin
       .from('deployments')
       .select(
-        'id, role_title, start_date, end_date, volunteer_id, organisation_id, volunteers ( full_name, email ), organisations ( name, contact_name, contact_email )',
+        'id, role_title, org_contact_role, start_date, end_date, volunteer_id, organisation_id, volunteers ( full_name, email ), organisations ( name, contact_name, contact_email, contact_title )',
       )
       .eq('id', deploymentId)
       .single()
@@ -154,6 +154,7 @@ Deno.serve(async (req) => {
             volunteerName: vol?.full_name ?? 'the volunteer',
             orgName: org.name,
             role: deployment.role_title,
+            contactRole: deployment.org_contact_role ?? org?.contact_title ?? '',
             period,
             closesOn,
             link: `${appUrl}/survey/org/${tokens.org}`,
@@ -315,14 +316,15 @@ AfriVate Technologies Ltd.`
   }
 }
 
-function orgEmail({ supervisorName, volunteerName, orgName, role, period, closesOn, link }: {
-  supervisorName: string; volunteerName: string; orgName: string; role: string; period: string; closesOn: string; link: string
+function orgEmail({ supervisorName, volunteerName, orgName, role, contactRole, period, closesOn, link }: {
+  supervisorName: string; volunteerName: string; orgName: string; role: string; contactRole?: string; period: string; closesOn: string; link: string
 }) {
+  const contactLine = contactRole ? ` as ${contactRole}` : ''
   const text = `Dear ${supervisorName},
 
 Thank you for hosting ${volunteerName} as ${role} at ${orgName} (${period}).
 
-Your feedback is essential for measuring volunteer effectiveness and improving future deployments. Please complete this short assessment. All responses are treated confidentially.
+Your feedback${contactLine} is essential for measuring volunteer effectiveness and improving future deployments. Please complete this short assessment. All responses are treated confidentially.
 
 Complete the assessment: ${link}
 
@@ -336,7 +338,7 @@ AfriVate Technologies Ltd.`
   const body = `
     ${h1('A quick feedback request')}
     ${p(`Dear ${supervisorName}, thank you for hosting <strong>${volunteerName}</strong> at <strong>${orgName}</strong>. Your assessment of their contribution is a key part of how Afrivate measures and improves volunteer impact.`)}
-    ${infoCard([['Volunteer', volunteerName], ['Role', role], ['Deployment', period]])}
+    ${infoCard([['Volunteer', volunteerName], ['Volunteer role', role], ['Your role', contactRole || 'Supervisor / contact'], ['Deployment', period]])}
     ${p('The assessment takes about <strong>5 minutes</strong> and all responses are kept confidential.')}
     ${button(link, 'Complete the assessment →', BRAND.green)}
     ${p(`⏳ This link is unique to this deployment and closes on <strong>${closesOn}</strong>.`)}

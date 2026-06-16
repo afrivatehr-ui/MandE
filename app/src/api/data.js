@@ -9,10 +9,10 @@ function one(rel) {
 }
 
 const DEPLOYMENT_SELECT = `
-  id, role_title, start_date, end_date, status, vpi_score, vpi_category, action_flag, survey_target, archived_at, created_at, updated_at,
+  id, role_title, org_contact_role, start_date, end_date, status, vpi_score, vpi_category, action_flag, survey_target, archived_at, created_at, updated_at,
   volunteer_id, organisation_id,
   volunteers ( id, volunteer_id, full_name, email, archived_at ),
-  organisations ( id, name, sector, archived_at ),
+  organisations ( id, name, sector, contact_name, contact_email, contact_title, archived_at ),
   survey_tokens ( type, token, used, expires_at ),
   volunteer_surveys ( id, submitted_at, volunteer_vpi, onboarding_avg, work_exp_avg, org_env_avg,
     s5_overall_satisfaction, s5_nps_score, s5_volunteer_again ),
@@ -23,10 +23,10 @@ const DEPLOYMENT_SELECT = `
 
 // Fuller select for detail pages (complete survey answers for expandable views).
 const DEPLOYMENT_DETAIL_SELECT = `
-  id, role_title, start_date, end_date, status, vpi_score, vpi_category, action_flag, created_at, updated_at,
+  id, role_title, org_contact_role, start_date, end_date, status, vpi_score, vpi_category, action_flag, created_at, updated_at,
   volunteer_id, organisation_id,
   volunteers ( id, volunteer_id, full_name, email, phone ),
-  organisations ( id, name, sector, contact_name, contact_email ),
+  organisations ( id, name, sector, contact_name, contact_email, contact_title ),
   volunteer_surveys ( * ),
   org_surveys ( * )
 `
@@ -194,7 +194,13 @@ export async function fetchOrganisation(id) {
 
 // --- Mutations ---------------------------------------------------------------
 export async function createVolunteer(payload) {
-  const { data, error } = await supabase.from('volunteers').insert(payload).select().single()
+  const volunteer_id = await nextVolunteerCode()
+  const { data, error } = await supabase.from('volunteers').insert({
+    volunteer_id,
+    full_name: payload.full_name,
+    email: payload.email,
+    phone: payload.phone || null,
+  }).select().single()
   if (error) throw error
   return data
 }

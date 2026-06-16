@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { useAuthStore, isAdmin, isWriter } from '../../store/authStore'
+import { useAuthStore, isAdmin, isWriter, ROLE_LABELS } from '../../store/authStore'
 import { useIdleLogout } from '../../hooks/useIdleLogout'
 import Logo from '../Logo'
 
@@ -113,7 +113,7 @@ export default function AppLayout() {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-body text-sm text-afri-white">{profile?.name}</p>
-                <p className="truncate font-body text-xs text-afri-white/60">{profile?.role}</p>
+                <p className="truncate font-body text-xs text-afri-white/60">{ROLE_LABELS[role] ?? role}</p>
               </div>
             </div>
             <button

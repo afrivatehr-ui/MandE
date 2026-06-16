@@ -195,7 +195,7 @@ function NoChartData({ label = 'No scored deployments yet.' }) {
 export function ErrorNote({ error }) {
   return (
     <div className="rounded-card border border-afri-red/30 bg-afri-red/5 p-5 font-body text-sm text-afri-red">
-      Couldn't load data: {error?.message || 'unknown error'}
+      We couldn&apos;t load this page. {error?.message || 'Please refresh and try again.'}
     </div>
   )
 }

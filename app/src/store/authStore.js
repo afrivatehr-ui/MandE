@@ -1,23 +1,20 @@
 import { create } from 'zustand'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
-/**
- * Auth + profile (role) state. The session comes from Supabase Auth; the role
- * (ADMIN / HR / VIEWER) is read from the `profiles` table.
- */
 export const useAuthStore = create((set, get) => ({
   session: null,
   user: null,
   profile: null,
   loading: true,
+  bootstrapped: false,
   initialised: false,
 
   async init() {
     if (get().initialised) return
-    set({ initialised: true })
+    set({ initialised: true, loading: true })
 
     if (!isSupabaseConfigured) {
-      set({ loading: false })
+      set({ loading: false, bootstrapped: true })
       return
     }
 
@@ -25,33 +22,52 @@ export const useAuthStore = create((set, get) => ({
       const {
         data: { session },
       } = await supabase.auth.getSession()
-      await get().applySession(session)
+      await get().applySession(session, { isBootstrap: true })
 
-      supabase.auth.onAuthStateChange((_event, nextSession) => {
+      supabase.auth.onAuthStateChange((event, nextSession) => {
+        if (event === 'INITIAL_SESSION') return
         get().applySession(nextSession)
       })
     } catch (err) {
       console.error('Auth init failed:', err)
-      set({ session: null, user: null, profile: null, loading: false })
+      set({ session: null, user: null, profile: null, loading: false, bootstrapped: true })
     }
   },
 
-  async applySession(session) {
+  async applySession(session, { isBootstrap = false } = {}) {
     if (!session?.user) {
-      set({ session: null, user: null, profile: null, loading: false })
+      set({ session: null, user: null, profile: null, loading: false, bootstrapped: true })
       return
     }
-    set({ session, user: session.user, loading: true })
+
+    const sameUser = get().user?.id === session.user.id
+
+    if (!sameUser) {
+      set({ session, user: session.user, profile: null, loading: true })
+    } else {
+      set({ session, user: session.user })
+    }
+
     try {
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('id, email, name, role')
         .eq('id', session.user.id)
         .single()
-      set({ profile: profile ?? null, loading: false })
+
+      if (error) throw error
+      set({ profile: profile ?? null, loading: false, bootstrapped: true })
     } catch (err) {
       console.error('Profile fetch failed:', err)
-      set({ profile: null, loading: false })
+      if (sameUser && get().profile) {
+        set({ loading: false, bootstrapped: true })
+      } else {
+        set({ profile: null, loading: false, bootstrapped: true })
+      }
+    }
+
+    if (isBootstrap && get().bootstrapped !== true) {
+      set({ bootstrapped: true, loading: false })
     }
   },
 
@@ -64,7 +80,7 @@ export const useAuthStore = create((set, get) => ({
 
   async signOut() {
     await supabase.auth.signOut()
-    set({ session: null, user: null, profile: null })
+    set({ session: null, user: null, profile: null, loading: false, bootstrapped: true })
   },
 
   async resetPasswordForEmail(email) {
@@ -87,7 +103,6 @@ export const useAuthStore = create((set, get) => ({
     if (error) throw error
   },
 
-  // Convenience role checks (mirrors RLS in the database).
   get role() {
     return get().profile?.role ?? null
   },
@@ -95,3 +110,9 @@ export const useAuthStore = create((set, get) => ({
 
 export const isWriter = (role) => role === 'ADMIN' || role === 'HR'
 export const isAdmin = (role) => role === 'ADMIN'
+
+export const ROLE_LABELS = {
+  ADMIN: 'Administrator',
+  HR: 'HR (Read & write)',
+  VIEWER: 'Viewer (Read only)',
+}

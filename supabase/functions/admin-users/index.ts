@@ -1,20 +1,19 @@
 // =============================================================================
 // Afrivate M&E - Admin user management (ADMIN only).
 //
-//   POST { action: 'create', email, name, role, password }
+//   POST { action: 'create', email, name, role }
+//   POST { action: 'approve_request', request_id, role }
 //   POST { action: 'delete', user_id }
-//
-// Uses the service-role key for the Auth admin API. The caller must be an
-// authenticated ADMIN. Profiles are created by the on_auth_user_created trigger
-// and removed via the on-delete-cascade FK.
 // =============================================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sendWelcomeEmail, tempPassword } from '../_shared/mail.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -26,13 +25,39 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
 
+async function createStaffUser(
+  admin: ReturnType<typeof createClient>,
+  email: string,
+  name: string,
+  role: string,
+  password: string,
+) {
+  const { data, error } = await admin.auth.admin.createUser({
+    email: email.trim().toLowerCase(),
+    password,
+    email_confirm: true,
+    user_metadata: { name, role },
+  })
+  if (error) throw new Error(error.message)
+
+  await admin.auth.admin.updateUserById(data.user.id, { email_confirm: true })
+  await admin.from('profiles').update({ role, name, email: email.trim().toLowerCase() }).eq('id', data.user.id)
+
+  try {
+    await sendWelcomeEmail(email.trim().toLowerCase(), name, password)
+  } catch (mailErr) {
+    return { id: data.user.id, emailSent: false, mailError: String((mailErr as Error)?.message ?? mailErr) }
+  }
+
+  return { id: data.user.id, emailSent: true }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ success: false, error: 'Method not allowed.' }, 405)
 
   const admin = createClient(supabaseUrl, serviceKey)
 
-  // AuthZ: ADMIN only.
   const authHeader = req.headers.get('Authorization') ?? ''
   const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
   const {
@@ -47,27 +72,96 @@ Deno.serve(async (req) => {
     if (!body?.action) return json({ success: false, error: 'Missing action.' }, 400)
 
     if (body.action === 'create') {
-      const { email, name, role, password } = body
-      if (!email || !password || !name) return json({ success: false, error: 'Email, name and password are required.' }, 400)
+      const { email, name, role } = body
+      if (!email || !name) return json({ success: false, error: 'Email and name are required.' }, 400)
       if (!['ADMIN', 'HR', 'VIEWER'].includes(role)) return json({ success: false, error: 'Invalid role.' }, 400)
-      const { data, error } = await admin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { name, role },
-      })
-      if (error) return json({ success: false, error: error.message }, 400)
-      // Ensure the profile reflects the chosen role (in case the trigger defaulted).
-      await admin.from('profiles').update({ role, name }).eq('id', data.user.id)
-      return json({ success: true, data: { id: data.user.id } })
+
+      const password = tempPassword()
+      const result = await createStaffUser(admin, email, name, role, password)
+      if (!result.emailSent) {
+        return json({
+          success: true,
+          data: result,
+          warning: `User created but email could not be sent: ${result.mailError}. Share the login details manually.`,
+        })
+      }
+      return json({ success: true, data: result })
+    }
+
+    if (body.action === 'approve_request') {
+      const { request_id: requestId, role } = body
+      if (!requestId) return json({ success: false, error: 'Missing request_id.' }, 400)
+      if (!['ADMIN', 'HR', 'VIEWER'].includes(role)) return json({ success: false, error: 'Invalid role.' }, 400)
+
+      const { data: reqRow, error: reqErr } = await admin
+        .from('access_requests')
+        .select('*')
+        .eq('id', requestId)
+        .eq('status', 'PENDING')
+        .single()
+
+      if (reqErr || !reqRow) return json({ success: false, error: 'Pending access request not found.' }, 404)
+
+      const password = tempPassword()
+      let userId = reqRow.user_id as string | null
+
+      if (userId) {
+        const { error: pwErr } = await admin.auth.admin.updateUserById(userId, {
+          password,
+          email_confirm: true,
+        })
+        if (pwErr) throw new Error(pwErr.message)
+        await admin.from('profiles').update({ role, name: reqRow.name }).eq('id', userId)
+        try {
+          await sendWelcomeEmail(reqRow.email, reqRow.name, password)
+        } catch (mailErr) {
+          return json({
+            success: false,
+            error: `Approved role but could not email user: ${String((mailErr as Error)?.message ?? mailErr)}`,
+          }, 500)
+        }
+      } else {
+        const created = await createStaffUser(admin, reqRow.email, reqRow.name, role, password)
+        userId = created.id
+        if (!created.emailSent) {
+          return json({
+            success: true,
+            data: { id: userId, emailSent: false },
+            warning: `User created but email failed: ${created.mailError}. Share the login details manually.`,
+          })
+        }
+      }
+
+      const { error: updErr } = await admin
+        .from('access_requests')
+        .update({ status: 'APPROVED', reviewed_at: new Date().toISOString(), user_id: userId })
+        .eq('id', requestId)
+
+      if (updErr) return json({ success: false, error: updErr.message }, 400)
+      return json({ success: true, data: { id: userId, emailSent: true } })
     }
 
     if (body.action === 'delete') {
       if (!body.user_id) return json({ success: false, error: 'Missing user_id.' }, 400)
       if (body.user_id === user.id) return json({ success: false, error: 'You cannot remove your own account.' }, 400)
-      const { error } = await admin.auth.admin.deleteUser(body.user_id)
+
+      const userId = body.user_id as string
+
+      const { data: targetProfile } = await admin
+        .from('profiles')
+        .select('email')
+        .eq('id', userId)
+        .maybeSingle()
+
+      await admin.from('access_requests').delete().eq('user_id', userId)
+      if (targetProfile?.email) {
+        await admin.from('access_requests').delete().eq('email', targetProfile.email)
+      }
+      await admin.from('profiles').delete().eq('id', userId)
+
+      const { error } = await admin.auth.admin.deleteUser(userId)
       if (error) return json({ success: false, error: error.message }, 400)
-      return json({ success: true, data: { deleted: body.user_id } })
+      return json({ success: true, data: { deleted: userId } })
     }
 
     return json({ success: false, error: 'Unknown action.' }, 400)

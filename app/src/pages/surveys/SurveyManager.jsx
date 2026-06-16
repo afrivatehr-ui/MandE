@@ -507,8 +507,8 @@ function SettingsTab({ survey, canWrite, onClose }) {
     >
       {survey._virtual && (
         <p className="rounded-lg border border-afri-blue/30 bg-afri-blue/5 p-3 font-body text-sm text-afri-blue">
-          Survey lifecycle settings aren't available yet. Apply the database migration
-          (<code>20260603000004_surveys.sql</code>) to enable editing status, scheduling and details.
+          Advanced survey settings are not available yet. Contact your administrator if you need to
+          change scheduling or publishing options.
         </p>
       )}
       {!canWrite && !survey._virtual && (

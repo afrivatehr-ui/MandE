@@ -316,8 +316,12 @@ function Identification({ context, isOrg, isCustom, answers, set }) {
             <p className="mt-1 font-body text-lg font-medium text-afri-black">{organisation.name}</p>
           </div>
           <div>
-            <p className="font-body text-xs font-semibold uppercase tracking-wide text-afri-purple/70">Role / Assignment</p>
+            <p className="font-body text-xs font-semibold uppercase tracking-wide text-afri-purple/70">Volunteer role / assignment</p>
             <p className="mt-1 font-body text-lg font-medium text-afri-black">{deployment.role_title}</p>
+          </div>
+          <div>
+            <p className="font-body text-xs font-semibold uppercase tracking-wide text-afri-purple/70">Organisation contact role</p>
+            <p className="mt-1 font-body text-lg font-medium text-afri-black">{deployment.org_contact_role || '—'}</p>
           </div>
           <div className="sm:col-span-2">
             <p className="font-body text-xs font-semibold uppercase tracking-wide text-afri-purple/70">Deployment Period</p>

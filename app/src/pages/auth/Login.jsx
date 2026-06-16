@@ -6,7 +6,7 @@ import PasswordInput from '../../components/PasswordInput'
 import Spinner from '../../components/Spinner'
 
 export default function Login() {
-  const { signIn, sendMagicLink, session, loading } = useAuthStore()
+  const { signIn, sendMagicLink, session, bootstrapped } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
   const [mode, setMode] = useState('password')
@@ -19,7 +19,7 @@ export default function Login() {
   const from = location.state?.from || '/dashboard'
   const idleLogout = location.state?.reason === 'idle'
 
-  if (!loading && session) return <Navigate to={from} replace />
+  if (bootstrapped && session) return <Navigate to={from} replace />
 
   async function handlePasswordSubmit(e) {
     e.preventDefault()
@@ -91,7 +91,7 @@ export default function Login() {
             mode === 'magic' ? 'bg-afri-white text-afri-purple shadow-sm dark:bg-afri-purple-elevated dark:text-afri-lavender' : 'afri-muted'
           }`}
         >
-          Magic link
+          Email link
         </button>
       </div>
 
@@ -156,7 +156,7 @@ export default function Login() {
             />
           </div>
           <button type="submit" disabled={submitting} className="afri-btn-primary w-full">
-            {submitting ? <Spinner /> : 'Send magic link'}
+            {submitting ? <Spinner /> : 'Send sign-in link'}
           </button>
         </form>
       )}

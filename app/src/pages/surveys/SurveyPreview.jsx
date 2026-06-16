@@ -8,7 +8,8 @@ const PREVIEW_CONTEXT = {
   volunteer: { full_name: 'Sample Volunteer', volunteer_id: 'AV-2026-000' },
   organisation: { name: 'Sample Organisation' },
   deployment: {
-    role_title: 'Sample Role / Assignment',
+    role_title: 'Sample volunteer role',
+    org_contact_role: 'Sample contact role',
     start_date: '2026-01-06',
     end_date: '2026-03-27',
   },

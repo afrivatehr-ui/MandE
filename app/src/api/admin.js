@@ -1,5 +1,19 @@
 import { supabase } from '../lib/supabase'
 
+function parseFunctionError(data, error) {
+  if (data?.error) return data.error
+  if (data?.success === false) return data.error || 'Something went wrong. Please try again.'
+  if (error?.message) return error.message
+  return 'Something went wrong. Please try again.'
+}
+
+function unwrapInvoke(result) {
+  const { data, error } = result
+  if (data?.success === false) throw new Error(parseFunctionError(data, error))
+  if (error && !data?.success) throw new Error(parseFunctionError(data, error))
+  return data
+}
+
 export async function fetchUsers() {
   const { data, error } = await supabase
     .from('profiles')
@@ -14,22 +28,21 @@ export async function updateUserRole(id, role) {
   if (error) throw error
 }
 
-export async function adminCreateUser({ email, name, role, password }) {
-  const { data, error } = await supabase.functions.invoke('admin-users', {
-    body: { action: 'create', email, name, role, password },
+export async function adminCreateUser({ email, name, role }) {
+  const result = await supabase.functions.invoke('admin-users', {
+    body: { action: 'create', email, name, role },
   })
-  if (error) throw new Error(error.message)
-  if (data && data.success === false) throw new Error(data.error)
-  return data
+  const data = unwrapInvoke(result)
+  if (data?.warning) return { ...data.data, warning: data.warning }
+  return data?.data ?? data
 }
 
 export async function adminDeleteUser(userId) {
-  const { data, error } = await supabase.functions.invoke('admin-users', {
+  const result = await supabase.functions.invoke('admin-users', {
     body: { action: 'delete', user_id: userId },
   })
-  if (error) throw new Error(error.message)
-  if (data && data.success === false) throw new Error(data.error)
-  return data
+  const data = unwrapInvoke(result)
+  return data?.data ?? data
 }
 
 export async function fetchAccessRequests() {
@@ -43,33 +56,18 @@ export async function fetchAccessRequests() {
 }
 
 export async function approveAccessRequest(requestId, approveRole) {
-  const { data, error } = await supabase.from('access_requests')
-    .select('user_id')
-    .eq('id', requestId)
-    .single()
-
-  if (error) throw error
-
-  const userId = data.user_id
-
-  // Update profile with approved role
-  const { error: profileError } = await supabase.from('profiles')
-    .update({ role: approveRole })
-    .eq('id', userId)
-
-  if (profileError) throw profileError
-
-  // Mark request as approved
-  const { error: requestError } = await supabase.from('access_requests')
-    .update({ status: 'APPROVED', reviewed_at: new Date() })
-    .eq('id', requestId)
-
-  if (requestError) throw requestError
+  const result = await supabase.functions.invoke('admin-users', {
+    body: { action: 'approve_request', request_id: requestId, role: approveRole },
+  })
+  const data = unwrapInvoke(result)
+  if (data?.warning) return { warning: data.warning, ...data.data }
+  return data?.data ?? data
 }
 
 export async function rejectAccessRequest(requestId) {
-  const { error } = await supabase.from('access_requests')
-    .update({ status: 'REJECTED', reviewed_at: new Date() })
+  const { error } = await supabase
+    .from('access_requests')
+    .update({ status: 'REJECTED', reviewed_at: new Date().toISOString() })
     .eq('id', requestId)
 
   if (error) throw error
