@@ -80,8 +80,10 @@ function normaliseDeployment(d, volSurveyOverride, orgSurveyOverride) {
     volunteerName: vol?.full_name ?? '—',
     volunteerCode: vol?.volunteer_id ?? '—',
     orgName: org?.name ?? '—',
-    volSubmitted: isSurveyRow(volSurvey) || (needsVolunteerSurvey && tokenUsed.volunteer),
-    orgSubmitted: isSurveyRow(orgSurvey) || (needsOrganisationSurvey && tokenUsed.org),
+    volSubmitted: isSurveyRow(volSurvey),
+    orgSubmitted: isSurveyRow(orgSurvey),
+    volLinkUsed: needsVolunteerSurvey && tokenUsed.volunteer && !isSurveyRow(volSurvey),
+    orgLinkUsed: needsOrganisationSurvey && tokenUsed.org && !isSurveyRow(orgSurvey),
     task: orgSurvey?.task_perf_avg ?? null,
     prof: orgSurvey?.professionalism_avg ?? null,
     impact: orgSurvey?.impact_avg ?? null,
@@ -380,6 +382,8 @@ async function countResponses(survey) {
 // List surveys (built-in + custom) enriched with live response counts and the
 // most recent submission. Falls back to virtual instruments if not migrated.
 export async function fetchSurveys() {
+  await supabase.rpc('publish_due_surveys').catch(() => {})
+
   let surveys
   const { data, error } = await supabase.from('surveys').select('*').order('is_builtin', { ascending: false }).order('created_at', { ascending: true })
   if (error) {

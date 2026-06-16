@@ -33,7 +33,7 @@ alter table public.deployments     enable row level security;
 alter table public.volunteer_surveys enable row level security;
 alter table public.org_surveys     enable row level security;
 alter table public.survey_tokens   enable row level security;
-alter table public.access_requests enable row level security;
+-- access_requests RLS is enabled in migration 006 when the table is created.
 
 -- --- Profiles ----------------------------------------------------------------
 drop policy if exists profiles_select_self_or_admin on public.profiles;
@@ -101,19 +101,4 @@ drop policy if exists org_surveys_read on public.org_surveys;
 create policy org_surveys_read on public.org_surveys
   for select to authenticated using (true);
 
--- access_requests: admins can view/update all; users can view own
-drop policy if exists access_requests_read on public.access_requests;
-create policy access_requests_read on public.access_requests
-  for select to authenticated
-  using (user_id = auth.uid() or public.is_admin());
-
-drop policy if exists access_requests_admin_update on public.access_requests;
-create policy access_requests_admin_update on public.access_requests
-  for update to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
-
-drop policy if exists access_requests_user_insert on public.access_requests;
-create policy access_requests_user_insert on public.access_requests
-  for insert to authenticated
-  with check (user_id = auth.uid());
+-- access_requests policies: see migration 006_access_requests.sql

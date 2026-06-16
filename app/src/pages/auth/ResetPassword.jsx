@@ -10,6 +10,7 @@ export default function ResetPassword() {
   const navigate = useNavigate()
   const { updatePassword } = useAuthStore()
   const [ready, setReady] = useState(false)
+  const [timedOut, setTimedOut] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
@@ -17,6 +18,9 @@ export default function ResetPassword() {
 
   useEffect(() => {
     let cancelled = false
+    const timeout = setTimeout(() => {
+      if (!cancelled) setTimedOut(true)
+    }, 12000)
 
     async function checkRecovery() {
       const { data: { session } } = await supabase.auth.getSession()
@@ -37,6 +41,7 @@ export default function ResetPassword() {
     const cleanupPromise = checkRecovery()
     return () => {
       cancelled = true
+      clearTimeout(timeout)
       cleanupPromise.then((unsub) => unsub?.())
     }
   }, [])
@@ -63,6 +68,20 @@ export default function ResetPassword() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (timedOut && !ready) {
+    return (
+      <AuthCard subtitle="">
+        <h1 className="font-heading text-h2 text-afri-purple">Link expired</h1>
+        <p className="afri-muted mt-3 text-sm">
+          This password reset link is invalid or has expired. Request a new one below.
+        </p>
+        <Link to="/forgot-password" className="afri-btn-primary mt-6 inline-flex w-full justify-center">
+          Request new reset link
+        </Link>
+      </AuthCard>
+    )
   }
 
   if (!ready) {

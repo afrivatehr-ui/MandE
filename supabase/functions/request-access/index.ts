@@ -35,8 +35,22 @@ Deno.serve(async (req) => {
     if (!['ADMIN', 'HR', 'VIEWER'].includes(roleRequested)) {
       return json({ success: false, error: 'Invalid role requested.' }, 400)
     }
+    if (roleRequested === 'ADMIN') {
+      return json({ success: false, error: 'Administrator access cannot be requested publicly. Choose HR or Viewer.' }, 400)
+    }
 
     const admin = createClient(supabaseUrl, serviceKey)
+
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { count: recentCount } = await admin
+      .from('access_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('email', email)
+      .gte('created_at', oneHourAgo)
+
+    if ((recentCount ?? 0) >= 3) {
+      return json({ success: false, error: 'Too many requests from this email. Please try again in an hour.' }, 429)
+    }
 
     const { data: existingProfile } = await admin.from('profiles').select('id').ilike('email', email).maybeSingle()
     if (existingProfile) {

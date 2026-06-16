@@ -61,6 +61,31 @@ function coercePayload(payload: Record<string, unknown>) {
   }
 }
 
+const LIKERT_FIELDS = new Set([
+  ...VOLUNTEER_REQUIRED.filter((k) => !['s5_overall_satisfaction', 's5_nps_score', 's5_volunteer_again'].includes(k)),
+  ...ORG_REQUIRED.filter((k) => !['supervisor_name', 'supervisor_title', 's5_overall_effectiveness', 's5_request_again', 's5_request_same_vol'].includes(k)),
+])
+
+function validateScores(payload: Record<string, unknown>, type: 'volunteer' | 'org') {
+  for (const key of LIKERT_FIELDS) {
+    if (!(key in payload)) continue
+    const n = Number(payload[key])
+    if (!Number.isFinite(n) || n < 1 || n > 5) {
+      return `Invalid score for ${key} (must be 1–5).`
+    }
+  }
+  if (type === 'volunteer') {
+    const sat = Number(payload.s5_overall_satisfaction)
+    if (!Number.isFinite(sat) || sat < 1 || sat > 10) return 'Overall satisfaction must be 1–10.'
+    const nps = Number(payload.s5_nps_score)
+    if (!Number.isFinite(nps) || nps < 0 || nps > 10) return 'Recommendation score must be 0–10.'
+  } else {
+    const eff = Number(payload.s5_overall_effectiveness)
+    if (!Number.isFinite(eff) || eff < 1 || eff > 10) return 'Overall effectiveness must be 1–10.'
+  }
+  return null
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -118,6 +143,8 @@ Deno.serve(async (req) => {
         if (answers[field] !== undefined) payload[field] = answers[field]
       }
       coercePayload(payload)
+      const scoreErr = validateScores(payload, ctx.type as 'volunteer' | 'org')
+      if (scoreErr) return json({ success: false, error: scoreErr }, 400)
 
       const table = ctx.type === 'org' ? 'org_surveys' : 'volunteer_surveys'
       const { error } = await supabase.from(table).insert(payload)
@@ -182,6 +209,20 @@ async function submitCustom(supabase: ReturnType<typeof createClient>, body: Rec
   }
 
   const answers = (body.answers ?? {}) as Record<string, unknown>
+  const respondentEmail = String(body.respondent_email ?? '').trim().toLowerCase()
+  if (respondentEmail) {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { count } = await supabase
+      .from('survey_responses')
+      .select('id', { count: 'exact', head: true })
+      .eq('survey_id', surveyId)
+      .eq('respondent_email', respondentEmail)
+      .gte('submitted_at', oneDayAgo)
+    if ((count ?? 0) >= 5) {
+      return json({ success: false, error: 'Too many submissions from this email today. Please try again tomorrow.' }, 429)
+    }
+  }
+
   const required = customRequiredKeys(ctx.survey.definition as Record<string, unknown>)
   for (const field of required) {
     const v = answers[field]

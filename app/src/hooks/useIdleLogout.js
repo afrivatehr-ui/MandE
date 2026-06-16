@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore'
 import { toast } from '../store/toastStore'
 
 const IDLE_MS = 10 * 60 * 1000 // 10 minutes
+const WARN_MS = 9 * 60 * 1000 // warn at 9 minutes
 
 const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll', 'click']
 
@@ -17,6 +18,7 @@ export function useIdleLogout() {
   const navigate = useNavigate()
   const lastActiveRef = useRef(Date.now())
   const timeoutRef = useRef(null)
+  const warnRef = useRef(null)
   const signingOutRef = useRef(false)
 
   useEffect(() => {
@@ -36,7 +38,14 @@ export function useIdleLogout() {
 
     function scheduleLogout() {
       clearTimeout(timeoutRef.current)
+      clearTimeout(warnRef.current)
       const remaining = IDLE_MS - (Date.now() - lastActiveRef.current)
+      const warnIn = WARN_MS - (Date.now() - lastActiveRef.current)
+      if (warnIn > 0) {
+        warnRef.current = setTimeout(() => {
+          toast.info('You will be signed out in 1 minute due to inactivity.')
+        }, warnIn)
+      }
       timeoutRef.current = setTimeout(logoutIdle, Math.max(0, remaining))
     }
 
@@ -60,6 +69,7 @@ export function useIdleLogout() {
 
     return () => {
       clearTimeout(timeoutRef.current)
+      clearTimeout(warnRef.current)
       ACTIVITY_EVENTS.forEach((event) => window.removeEventListener(event, recordActivity))
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }

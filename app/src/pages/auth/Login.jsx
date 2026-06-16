@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import AuthCard from '../../components/auth/AuthCard'
 import PasswordInput from '../../components/PasswordInput'
-import Spinner from '../../components/Spinner'
+import { safePath } from '../../utils/mapApiError'
 
 export default function Login() {
   const { signIn, sendMagicLink, session, bootstrapped } = useAuthStore()
@@ -16,7 +16,7 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [magicSent, setMagicSent] = useState(false)
 
-  const from = location.state?.from || '/dashboard'
+  const from = safePath(location.state?.from)
   const idleLogout = location.state?.reason === 'idle'
 
   if (bootstrapped && session) return <Navigate to={from} replace />

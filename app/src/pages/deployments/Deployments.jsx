@@ -26,6 +26,7 @@ import {
   nextVolunteerCode,
 } from '../../api/data'
 import { formatDateRange, formatVpi, STATUS_LABEL } from '../../utils/format'
+import { copyToClipboard } from '../../utils/mapApiError'
 
 const SURVEY_TARGETS = [
   { id: 'volunteer', label: 'Volunteer only', desc: 'Email the self-report survey to the volunteer (select which organisation they served at)' },
@@ -38,6 +39,7 @@ const FILTERS = [
   { id: 'ACTIVE', label: 'Active' },
   { id: 'AWAITING_SURVEYS', label: 'Awaiting surveys' },
   { id: 'SURVEYS_COMPLETE', label: 'Surveys complete' },
+  { id: 'COMPLETED', label: 'Completed' },
 ]
 
 function typeLabel(t) {
@@ -65,6 +67,8 @@ export default function Deployments() {
   const { profile } = useAuthStore()
   const canWrite = isWriter(profile?.role)
 
+  const expiryDays = useSettingsStore((st) => st.surveyTokenExpiryDays)
+
   const { data: deployments, isLoading, error } = useDeployments()
   const [filter, setFilter] = useState('ALL')
   const [showCreate, setShowCreate] = useState(false)
@@ -77,7 +81,7 @@ export default function Deployments() {
   }, [deployments, filter])
 
   const resendMutation = useMutation({
-    mutationFn: ({ id, types }) => sendSurveyEmails(id, undefined, types),
+    mutationFn: ({ id, types }) => sendSurveyEmails(id, expiryDays, types),
     onSuccess: (report) => {
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
       const msg = deliveryMessage(report ?? {})
@@ -111,14 +115,18 @@ export default function Deployments() {
     onError: (e) => toast.error(e.message),
   })
 
-  function copyLinks(d) {
+  async function copyLinks(d) {
     const origin = window.location.origin
     const vol = d.tokens?.volunteer ? `${origin}/survey/volunteer/${d.tokens.volunteer}` : null
     const org = d.tokens?.org ? `${origin}/survey/org/${d.tokens.org}` : null
     if (!vol && !org) return toast.error('No survey links yet — create or resend first.')
     const text = [vol && `Volunteer: ${vol}`, org && `Organisation: ${org}`].filter(Boolean).join('\n')
-    navigator.clipboard?.writeText(text)
-    toast.success('Survey links copied to clipboard.')
+    try {
+      await copyToClipboard(text)
+      toast.success('Survey links copied to clipboard.')
+    } catch {
+      toast.error('Could not copy links. Select and copy them manually from the email.')
+    }
   }
 
   if (isLoading) return <Spinner className="py-20" label="Loading deployments" />

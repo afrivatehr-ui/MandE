@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { mapApiError } from '../utils/mapApiError'
 
 function parseFunctionError(data, error) {
   if (data?.error) return data.error
@@ -19,13 +20,15 @@ export async function fetchUsers() {
     .from('profiles')
     .select('id, email, name, role, created_at')
     .order('created_at')
-  if (error) throw error
+  if (error) throw new Error(mapApiError(error))
   return data
 }
 
 export async function updateUserRole(id, role) {
-  const { error } = await supabase.from('profiles').update({ role }).eq('id', id)
-  if (error) throw error
+  const result = await supabase.functions.invoke('admin-users', {
+    body: { action: 'update_role', user_id: id, role },
+  })
+  unwrapInvoke(result)
 }
 
 export async function adminCreateUser({ email, name, role }) {
@@ -51,7 +54,7 @@ export async function fetchAccessRequests() {
     .select('id, user_id, email, name, organisation, role_requested, status, created_at')
     .eq('status', 'PENDING')
     .order('created_at')
-  if (error) throw error
+  if (error) throw new Error(mapApiError(error))
   return data
 }
 
@@ -65,10 +68,33 @@ export async function approveAccessRequest(requestId, approveRole) {
 }
 
 export async function rejectAccessRequest(requestId) {
-  const { error } = await supabase
-    .from('access_requests')
-    .update({ status: 'REJECTED', reviewed_at: new Date().toISOString() })
-    .eq('id', requestId)
+  const result = await supabase.functions.invoke('admin-users', {
+    body: { action: 'reject_request', request_id: requestId },
+  })
+  const data = unwrapInvoke(result)
+  return data?.data ?? data
+}
 
-  if (error) throw error
+export async function fetchAppSettings() {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('survey_token_expiry_days')
+    .eq('id', 1)
+    .maybeSingle()
+  if (error) {
+    if (error.code === 'PGRST205' || error.code === '42P01') return { survey_token_expiry_days: 14 }
+    throw new Error(mapApiError(error))
+  }
+  return data ?? { survey_token_expiry_days: 14 }
+}
+
+export async function updateAppSettings(patch) {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', 1)
+    .select('survey_token_expiry_days')
+    .single()
+  if (error) throw new Error(mapApiError(error))
+  return data
 }

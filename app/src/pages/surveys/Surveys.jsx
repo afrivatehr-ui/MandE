@@ -181,7 +181,7 @@ function SurveyCard({ survey, canWrite, busy, onOpen, onPreview, onSetStatus, on
         </button>
       </div>
 
-      {canWrite && (
+      {canWrite && !survey._virtual && (
         <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-afri-lavender/60 pt-3">
           {survey.status !== 'PUBLISHED' && (
             <QuickAction onClick={() => onSetStatus('PUBLISHED')} busy={busy}>Publish</QuickAction>

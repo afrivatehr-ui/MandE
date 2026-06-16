@@ -19,7 +19,7 @@ import KPICard from '../../components/KPICard'
 import VPIBadge from '../../components/VPIBadge'
 import EmptyState from '../../components/EmptyState'
 import Spinner from '../../components/Spinner'
-import { useAllDeployments } from '../../hooks/useData'
+import { useDeployments } from '../../hooks/useData'
 import {
   summarise,
   dimensionAverages,
@@ -32,7 +32,7 @@ import { formatVpi, formatDateTime } from '../../utils/format'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { data: deployments, isLoading, error } = useAllDeployments()
+  const { data: deployments, isLoading, error } = useDeployments()
 
   const derived = useMemo(() => {
     if (!deployments) return null
@@ -138,7 +138,7 @@ export default function Dashboard() {
                       <div className="flex shrink-0 items-center gap-3">
                         <span className="font-heading text-sm font-semibold text-afri-red">{formatVpi(d.vpi)}</span>
                         <button type="button" onClick={() => navigate(`/volunteers/${d.volunteer_id}`)} className="afri-btn-secondary !px-3 !py-1.5 text-xs">
-                          Schedule Review
+                          View profile
                         </button>
                       </div>
                     </li>

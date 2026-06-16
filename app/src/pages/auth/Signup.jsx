@@ -11,7 +11,7 @@ export default function Signup() {
     email: '',
     name: '',
     organisation: '',
-    role: 'HR',
+    role: 'VIEWER',
   })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -130,8 +130,7 @@ export default function Signup() {
             className="afri-input"
           >
             <option value="VIEWER">Viewer (Read-only)</option>
-            <option value="HR">HR (Read & Write)</option>
-            <option value="ADMIN">Admin (Full Access)</option>
+            <option value="HR">HR (Read & write)</option>
           </select>
         </div>
 

@@ -87,7 +87,12 @@ of each file below and click **Run**, one at a time, **in this exact order**:
 4. `supabase/migrations/20260603000004_surveys.sql`  (survey lifecycle)
 5. `supabase/migrations/20260603000005_custom_surveys.sql` (custom surveys)
 6. `supabase/migrations/20260603000006_access_requests.sql` (signup requests)
-7. `supabase/seed.sql`  (optional sample data + the admin login)
+7. `supabase/migrations/20260607000007_deployment_survey_targets.sql`
+8. `supabase/migrations/20260607000008_deployment_both_parties.sql`
+9. `supabase/migrations/20260608000009_vpi_recalc_archive.sql` (archive + VPI fix)
+10. `supabase/migrations/20260609000010_access_roles_contact.sql` (access request + roles)
+11. `supabase/migrations/20260610000011_audit_fixes.sql` (security + app settings)
+12. `supabase/seed.sql`  (optional sample data + the admin login)
 
 Each run should report success. After file 4, you'll have a login:
 - **Email:** `admin@afrivate.com`
@@ -241,7 +246,16 @@ needed — secrets are read at runtime.)
 ## 11. Reference
 
 **Edge Function names (must match exactly — the app calls them by name):**
-`surveys`, `send-survey-emails`, `admin-users`.
+`surveys`, `send-survey-emails`, `admin-users`, `request-access`, `send-auth-email`.
+
+Deploy public functions without JWT verification:
+```bash
+npx supabase functions deploy request-access --no-verify-jwt
+npx supabase functions deploy surveys --no-verify-jwt
+npx supabase functions deploy send-auth-email --no-verify-jwt
+npx supabase functions deploy admin-users
+npx supabase functions deploy send-survey-emails
+```
 
 **Edge Function secrets (set in dashboard):**
 | Secret | Example | Purpose |
@@ -252,6 +266,9 @@ needed — secrets are read at runtime.)
 | `SMTP_PORT` | `587` | Optional — default 587 |
 | `EMAIL_FROM` | `Afrivate M&E <afrivatehr@gmail.com>` | Sender shown to recipients |
 | `APP_URL` | `https://your-site.netlify.app` | Base URL in survey links and email logo |
+| `LOGO_URL` | optional full logo URL | Email header logo |
+| `ADMIN_NOTIFY_EMAILS` | optional comma-separated emails | Extra admin inboxes for access requests |
+| `SEND_EMAIL_HOOK_SECRET` | hook secret string | Required for branded auth emails (`send-auth-email`) |
 
 (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are injected by
 Supabase automatically — do not add them.)

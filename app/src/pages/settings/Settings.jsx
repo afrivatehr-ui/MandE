@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import PageHeader from '../../components/PageHeader'
 import Spinner from '../../components/Spinner'
@@ -7,7 +7,17 @@ import { ErrorNote } from '../dashboard/Dashboard'
 import { useAuthStore, ROLE_LABELS } from '../../store/authStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { toast } from '../../store/toastStore'
-import { fetchUsers, updateUserRole, adminCreateUser, adminDeleteUser, fetchAccessRequests, approveAccessRequest, rejectAccessRequest } from '../../api/admin'
+import {
+  fetchUsers,
+  updateUserRole,
+  adminCreateUser,
+  adminDeleteUser,
+  fetchAccessRequests,
+  approveAccessRequest,
+  rejectAccessRequest,
+  fetchAppSettings,
+  updateAppSettings,
+} from '../../api/admin'
 import { initials } from '../../utils/format'
 
 const ROLES = ['ADMIN', 'HR', 'VIEWER']
@@ -18,13 +28,38 @@ export default function Settings() {
   const { surveyTokenExpiryDays, setSurveyTokenExpiryDays } = useSettingsStore()
   const [expiryInput, setExpiryInput] = useState(surveyTokenExpiryDays)
   const [confirmRemove, setConfirmRemove] = useState(null)
+  const [confirmApprove, setConfirmApprove] = useState(null)
+  const [confirmReject, setConfirmReject] = useState(null)
+  const [approveRoles, setApproveRoles] = useState({})
 
   const { data: users, isLoading, error } = useQuery({ queryKey: ['users'], queryFn: fetchUsers })
 
-  const { data: accessRequests = [] } = useQuery({
+  const {
+    data: accessRequests = [],
+    isLoading: requestsLoading,
+    error: requestsError,
+  } = useQuery({
     queryKey: ['accessRequests'],
     queryFn: fetchAccessRequests,
   })
+
+  useQuery({
+    queryKey: ['appSettings'],
+    queryFn: async () => {
+      const settings = await fetchAppSettings()
+      setSurveyTokenExpiryDays(settings.survey_token_expiry_days)
+      setExpiryInput(settings.survey_token_expiry_days)
+      return settings
+    },
+  })
+
+  useEffect(() => {
+    const next = {}
+    for (const req of accessRequests) {
+      next[req.id] = req.role_requested
+    }
+    setApproveRoles(next)
+  }, [accessRequests])
 
   const roleMutation = useMutation({
     mutationFn: ({ id, role }) => updateUserRole(id, role),
@@ -35,10 +70,13 @@ export default function Settings() {
     onError: (e) => toast.error(e.message),
   })
 
+  const [inviteReset, setInviteReset] = useState(0)
+
   const createMutation = useMutation({
     mutationFn: adminCreateUser,
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
+      setInviteReset((n) => n + 1)
       if (result?.warning) toast.error(result.warning)
       else toast.success('User invited — login details emailed with password change instructions.')
     },
@@ -61,6 +99,7 @@ export default function Settings() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['accessRequests'] })
       queryClient.invalidateQueries({ queryKey: ['users'] })
+      setConfirmApprove(null)
       if (result?.warning) toast.error(result.warning)
       else toast.success('Access approved — login details emailed with password change instructions.')
     },
@@ -71,7 +110,18 @@ export default function Settings() {
     mutationFn: rejectAccessRequest,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accessRequests'] })
-      toast.success('Access request rejected.')
+      setConfirmReject(null)
+      toast.success('Access request rejected — applicant notified by email.')
+    },
+    onError: (e) => toast.error(e.message),
+  })
+
+  const expiryMutation = useMutation({
+    mutationFn: (days) => updateAppSettings({ survey_token_expiry_days: days }),
+    onSuccess: (data) => {
+      setSurveyTokenExpiryDays(data.survey_token_expiry_days)
+      queryClient.invalidateQueries({ queryKey: ['appSettings'] })
+      toast.success('Survey expiry updated for the whole organisation.')
     },
     onError: (e) => toast.error(e.message),
   })
@@ -81,9 +131,17 @@ export default function Settings() {
       <PageHeader title="Settings" subtitle="Manage users and survey preferences" />
 
       <div className="flex flex-col gap-6">
-        {accessRequests.length > 0 && (
-          <section className="afri-card border-l-4 border-afri-orange p-6">
-            <h2 className="mb-4 font-heading text-h3 text-afri-orange">Pending access requests ({accessRequests.length})</h2>
+        <section className="afri-card border-l-4 border-afri-orange p-6">
+          <h2 className="mb-4 font-heading text-h3 text-afri-orange">
+            Pending access requests ({accessRequests.length})
+          </h2>
+          {requestsLoading ? (
+            <Spinner className="py-6" />
+          ) : requestsError ? (
+            <ErrorNote error={requestsError} />
+          ) : accessRequests.length === 0 ? (
+            <p className="font-body text-sm text-afri-black/55">No pending requests.</p>
+          ) : (
             <div className="space-y-4">
               {accessRequests.map((req) => (
                 <div key={req.id} className="flex flex-col gap-2 rounded-lg border border-afri-orange/30 bg-afri-orange/5 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -97,8 +155,8 @@ export default function Settings() {
                   </div>
                   <div className="flex gap-2">
                     <select
-                      id={`role-select-${req.id}`}
-                      defaultValue={req.role_requested}
+                      value={approveRoles[req.id] ?? req.role_requested}
+                      onChange={(e) => setApproveRoles((prev) => ({ ...prev, [req.id]: e.target.value }))}
                       className="afri-input !w-auto !py-1.5 text-sm"
                     >
                       {ROLES.map((r) => (
@@ -106,18 +164,14 @@ export default function Settings() {
                       ))}
                     </select>
                     <button
-                      onClick={() => {
-                        const selectEl = document.getElementById(`role-select-${req.id}`)
-                        const role = selectEl.value
-                        approveMutation.mutate({ requestId: req.id, role })
-                      }}
+                      onClick={() => setConfirmApprove({ ...req, role: approveRoles[req.id] ?? req.role_requested })}
                       disabled={approveMutation.isPending}
                       className="afri-btn-primary !px-4 !py-1.5 text-sm"
                     >
                       Approve
                     </button>
                     <button
-                      onClick={() => rejectMutation.mutate(req.id)}
+                      onClick={() => setConfirmReject(req)}
                       disabled={rejectMutation.isPending}
                       className="afri-btn-ghost !px-4 !py-1.5 text-sm text-afri-red"
                     >
@@ -127,8 +181,8 @@ export default function Settings() {
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          )}
+        </section>
 
         <section className="afri-card p-6">
           <h2 className="mb-4 font-heading text-h3 text-afri-purple">User management</h2>
@@ -187,13 +241,17 @@ export default function Settings() {
             </div>
           )}
 
-          <InviteForm onInvite={(payload) => createMutation.mutate(payload)} busy={createMutation.isPending} />
+          <InviteForm
+            key={inviteReset}
+            onInvite={(payload) => createMutation.mutate(payload)}
+            busy={createMutation.isPending}
+          />
         </section>
 
         <section className="afri-card p-6">
           <h2 className="mb-2 font-heading text-h3 text-afri-purple">Survey link expiry</h2>
           <p className="mb-4 font-body text-sm text-afri-black/60">
-            How many days after a deployment ends survey links stay active. This applies to new deployments.
+            How many days after a deployment ends survey links stay active. Saved for all administrators.
           </p>
           <div className="flex items-end gap-3">
             <div>
@@ -208,13 +266,11 @@ export default function Settings() {
               />
             </div>
             <button
-              onClick={() => {
-                setSurveyTokenExpiryDays(expiryInput)
-                toast.success('Survey expiry updated.')
-              }}
+              onClick={() => expiryMutation.mutate(Number(expiryInput))}
+              disabled={expiryMutation.isPending}
               className="afri-btn-primary"
             >
-              Save
+              {expiryMutation.isPending ? <Spinner /> : 'Save'}
             </button>
           </div>
         </section>
@@ -230,6 +286,27 @@ export default function Settings() {
         onCancel={() => setConfirmRemove(null)}
         onConfirm={() => deleteMutation.mutate(confirmRemove.id)}
       />
+
+      <ConfirmDialog
+        open={Boolean(confirmApprove)}
+        title="Approve access?"
+        message={`Create an account for ${confirmApprove?.name} (${confirmApprove?.email}) as ${ROLE_LABELS[confirmApprove?.role] ?? confirmApprove?.role}? Login details will be emailed.`}
+        confirmLabel="Approve"
+        busy={approveMutation.isPending}
+        onCancel={() => setConfirmApprove(null)}
+        onConfirm={() => approveMutation.mutate({ requestId: confirmApprove.id, role: confirmApprove.role })}
+      />
+
+      <ConfirmDialog
+        open={Boolean(confirmReject)}
+        title="Reject access request?"
+        message={`Reject ${confirmReject?.name}'s request? They will receive an email notification.`}
+        confirmLabel="Reject"
+        tone="danger"
+        busy={rejectMutation.isPending}
+        onCancel={() => setConfirmReject(null)}
+        onConfirm={() => rejectMutation.mutate(confirmReject.id)}
+      />
     </div>
   )
 }
@@ -238,6 +315,11 @@ function InviteForm({ onInvite, busy }) {
   const [form, setForm] = useState({ name: '', email: '', role: 'VIEWER' })
   const set = (patch) => setForm((f) => ({ ...f, ...patch }))
   const valid = form.name && form.email
+
+  function handleInvite() {
+    if (!valid || busy) return
+    onInvite(form)
+  }
 
   return (
     <div className="mt-6 border-t border-afri-lavender pt-5">
@@ -254,7 +336,7 @@ function InviteForm({ onInvite, busy }) {
           ))}
         </select>
       </div>
-      <button onClick={() => valid && onInvite(form)} disabled={!valid || busy} className="afri-btn-primary mt-3">
+      <button onClick={handleInvite} disabled={!valid || busy} className="afri-btn-primary mt-3">
         {busy ? <Spinner /> : 'Invite user'}
       </button>
     </div>

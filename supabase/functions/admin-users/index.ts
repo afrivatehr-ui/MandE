@@ -3,10 +3,12 @@
 //
 //   POST { action: 'create', email, name, role }
 //   POST { action: 'approve_request', request_id, role }
+//   POST { action: 'update_role', user_id, role }
+//   POST { action: 'reject_request', request_id }
 //   POST { action: 'delete', user_id }
 // =============================================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { sendWelcomeEmail, tempPassword } from '../_shared/mail.ts'
+import { sendWelcomeEmail, sendAccessRequestRejectedEmail, tempPassword } from '../_shared/mail.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -76,6 +78,10 @@ Deno.serve(async (req) => {
       if (!email || !name) return json({ success: false, error: 'Email and name are required.' }, 400)
       if (!['ADMIN', 'HR', 'VIEWER'].includes(role)) return json({ success: false, error: 'Invalid role.' }, 400)
 
+      const normalizedEmail = String(email).trim().toLowerCase()
+      const { data: existing } = await admin.from('profiles').select('id').ilike('email', normalizedEmail).maybeSingle()
+      if (existing) return json({ success: false, error: 'An account with this email already exists.' }, 400)
+
       const password = tempPassword()
       const result = await createStaffUser(admin, email, name, role, password)
       if (!result.emailSent) {
@@ -139,6 +145,48 @@ Deno.serve(async (req) => {
 
       if (updErr) return json({ success: false, error: updErr.message }, 400)
       return json({ success: true, data: { id: userId, emailSent: true } })
+    }
+
+    if (body.action === 'update_role') {
+      const { user_id: userId, role } = body
+      if (!userId || !role) return json({ success: false, error: 'Missing user_id or role.' }, 400)
+      if (userId === user.id) return json({ success: false, error: 'You cannot change your own role here.' }, 400)
+      if (!['ADMIN', 'HR', 'VIEWER'].includes(role)) return json({ success: false, error: 'Invalid role.' }, 400)
+
+      const { error } = await admin.from('profiles').update({ role }).eq('id', userId)
+      if (error) return json({ success: false, error: error.message }, 400)
+      return json({ success: true, data: { updated: userId, role } })
+    }
+
+    if (body.action === 'reject_request') {
+      const requestId = body.request_id
+      if (!requestId) return json({ success: false, error: 'Missing request_id.' }, 400)
+
+      const { data: reqRow, error: reqErr } = await admin
+        .from('access_requests')
+        .select('*')
+        .eq('id', requestId)
+        .eq('status', 'PENDING')
+        .single()
+
+      if (reqErr || !reqRow) return json({ success: false, error: 'Pending access request not found.' }, 404)
+
+      const { error: updErr } = await admin
+        .from('access_requests')
+        .update({ status: 'REJECTED', reviewed_at: new Date().toISOString() })
+        .eq('id', requestId)
+
+      if (updErr) return json({ success: false, error: updErr.message }, 400)
+
+      let emailSent = false
+      try {
+        await sendAccessRequestRejectedEmail(reqRow.email, reqRow.name)
+        emailSent = true
+      } catch {
+        // Request is rejected even if email fails.
+      }
+
+      return json({ success: true, data: { rejected: requestId, emailSent } })
     }
 
     if (body.action === 'delete') {

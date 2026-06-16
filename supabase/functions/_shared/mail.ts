@@ -109,6 +109,23 @@ export async function sendWelcomeEmail(to: string, name: string, password: strin
   })
 }
 
+export async function sendAccessRequestRejectedEmail(to: string, name: string) {
+  const firstName = name.split(' ')[0] || 'there'
+  const body = `
+    ${h1('Access request update')}
+    ${p(`Hi ${firstName}, thank you for your interest in Afrivate Monitoring &amp; Evaluation.`)}
+    ${p('After review, we are unable to approve your access request at this time. If you believe this is a mistake, please contact your Afrivate administrator directly.')}`
+
+  await sendMail({
+    to,
+    subject: 'Afrivate M&E access request update',
+    preheader: 'Your access request was not approved.',
+    accent: BRAND.purple,
+    html: body,
+    text: `Hi ${firstName},\n\nYour access request for Afrivate M&E was not approved at this time.\n\nAfriVate Technologies Ltd.`,
+  })
+}
+
 export type AccessRequestDetails = {
   name: string
   email: string

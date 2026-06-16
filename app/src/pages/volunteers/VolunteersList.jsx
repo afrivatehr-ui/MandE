@@ -25,9 +25,20 @@ export default function VolunteersList() {
 
   const rows = useMemo(() => {
     if (!deployments) return []
+    const byVolunteer = new Map()
+    for (const d of deployments) {
+      if (d.volunteerArchived || !d.volunteer_id) continue
+      const prev = byVolunteer.get(d.volunteer_id)
+      if (!prev) {
+        byVolunteer.set(d.volunteer_id, { ...d, deploymentCount: 1 })
+        continue
+      }
+      const latest = d.end_date >= prev.end_date ? d : prev
+      byVolunteer.set(d.volunteer_id, { ...latest, deploymentCount: prev.deploymentCount + 1 })
+    }
+
     const q = search.trim().toLowerCase()
-    return deployments.filter((d) => {
-      if (d.volunteerArchived) return false
+    return [...byVolunteer.values()].filter((d) => {
       if (q && !`${d.volunteerName} ${d.volunteerCode} ${d.orgName}`.toLowerCase().includes(q)) return false
       if (category && d.category !== category) return false
       if (orgId && d.organisation_id !== orgId) return false
@@ -104,7 +115,7 @@ export default function VolunteersList() {
 
   return (
     <div>
-      <PageHeader title="Volunteers" subtitle={`${rows.length} deployment${rows.length === 1 ? '' : 's'}`} />
+      <PageHeader title="Volunteers" subtitle={`${rows.length} volunteer${rows.length === 1 ? '' : 's'} · latest deployment shown`} />
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end">
         <div className="min-w-0 flex-1 sm:col-span-2 lg:min-w-[200px]">
@@ -158,7 +169,7 @@ export default function VolunteersList() {
             <DataTable
               columns={columns}
               rows={rows}
-              rowKey={(r) => r.id}
+              rowKey={(r) => r.volunteer_id}
               onRowClick={(r) => navigate(`/volunteers/${r.volunteer_id}`)}
             />
           </div>

@@ -15,6 +15,7 @@ import VPIBadge from '../../components/VPIBadge'
 import KPICard from '../../components/KPICard'
 import Spinner from '../../components/Spinner'
 import { ErrorNote } from '../dashboard/Dashboard'
+import { mapApiError } from '../../utils/mapApiError'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { useOrganisation } from '../../hooks/useData'
 import { useAuthStore, isWriter } from '../../store/authStore'
@@ -53,7 +54,21 @@ export default function OrganisationDetail() {
   }, [data])
 
   if (isLoading) return <Spinner className="py-20" label="Loading organisation" />
-  if (error) return <ErrorNote error={error} />
+  if (error) {
+    const msg = mapApiError(error)
+    if (error.code === 'PGRST116' || /not found/i.test(msg)) {
+      return (
+        <div className="afri-card p-8 text-center">
+          <h1 className="font-heading text-h2 text-afri-purple">Organisation not found</h1>
+          <p className="afri-muted mt-2 text-sm">This organisation may have been removed or the link is incorrect.</p>
+          <button type="button" onClick={() => navigate('/organisations')} className="afri-btn-primary mt-6">
+            Back to organisations
+          </button>
+        </div>
+      )
+    }
+    return <ErrorNote error={error} />
+  }
 
   const { organisation, deployments } = data
   const { dims, stats, quotes } = derived

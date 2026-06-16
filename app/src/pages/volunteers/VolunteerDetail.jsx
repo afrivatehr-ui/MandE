@@ -9,6 +9,7 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 import Spinner from '../../components/Spinner'
 import SurveyAnswers from '../../components/survey/SurveyAnswers'
 import { ErrorNote } from '../dashboard/Dashboard'
+import { mapApiError } from '../../utils/mapApiError'
 import { useVolunteer } from '../../hooks/useData'
 import { useAuthStore, isWriter } from '../../store/authStore'
 import { archiveVolunteer } from '../../api/data'
@@ -39,7 +40,21 @@ export default function VolunteerDetail() {
   })
 
   if (isLoading) return <Spinner className="py-20" label="Loading profile" />
-  if (error) return <ErrorNote error={error} />
+  if (error) {
+    const msg = mapApiError(error)
+    if (error.code === 'PGRST116' || /not found/i.test(msg)) {
+      return (
+        <div className="afri-card p-8 text-center">
+          <h1 className="font-heading text-h2 text-afri-purple">Volunteer not found</h1>
+          <p className="afri-muted mt-2 text-sm">This volunteer may have been removed or the link is incorrect.</p>
+          <button type="button" onClick={() => navigate('/volunteers')} className="afri-btn-primary mt-6">
+            Back to volunteers
+          </button>
+        </div>
+      )
+    }
+    return <ErrorNote error={error} />
+  }
 
   const { volunteer, deployments } = data
   const latest = deployments.find((d) => d.vpi != null) || deployments[0] || null
