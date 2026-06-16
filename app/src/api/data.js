@@ -1,5 +1,14 @@
 import { supabase } from '../lib/supabase'
 import { VOLUNTEER_SURVEY, ORG_SURVEY } from '../config/surveyQuestions'
+import { mapApiError } from '../utils/mapApiError'
+
+function throwDb(error) {
+  if (error) {
+    const err = new Error(mapApiError(error))
+    err.code = error.code
+    throw err
+  }
+}
 
 // PostgREST returns embedded one-to-one relations as an object or a single-item
 // array depending on detection; normalise to a single object or null.
@@ -99,8 +108,8 @@ async function loadSurveyRowsByDeployment(ids) {
     supabase.from('volunteer_surveys').select('deployment_id, id, submitted_at, volunteer_vpi, onboarding_avg, work_exp_avg, org_env_avg, s5_overall_satisfaction, s5_nps_score, s5_volunteer_again').in('deployment_id', ids),
     supabase.from('org_surveys').select('deployment_id, id, submitted_at, supervisor_name, supervisor_title, task_perf_avg, professionalism_avg, impact_avg, org_vpi, s5_overall_effectiveness, s5_request_again, s5_request_same_vol, s6_strengths, s6_improvements, s6_other_feedback, s6_afrivate_improvements').in('deployment_id', ids),
   ])
-  if (volErr) throw volErr
-  if (orgErr) throw orgErr
+  if (volErr) throwDb(volErr)
+  if (orgErr) throwDb(orgErr)
   const volByDep = new Map((volRows ?? []).map((r) => [r.deployment_id, r]))
   const orgByDep = new Map((orgRows ?? []).map((r) => [r.deployment_id, r]))
   return { volByDep, orgByDep }
@@ -113,8 +122,8 @@ async function loadFullSurveyRowsByDeployment(ids) {
     supabase.from('volunteer_surveys').select('*').in('deployment_id', ids),
     supabase.from('org_surveys').select('*').in('deployment_id', ids),
   ])
-  if (volErr) throw volErr
-  if (orgErr) throw orgErr
+  if (volErr) throwDb(volErr)
+  if (orgErr) throwDb(orgErr)
   const volByDep = new Map((volRows ?? []).map((r) => [r.deployment_id, r]))
   const orgByDep = new Map((orgRows ?? []).map((r) => [r.deployment_id, r]))
   return { volByDep, orgByDep }
@@ -127,7 +136,7 @@ export async function fetchDeployments({ activeOnly = true } = {}) {
     .order('created_at', { ascending: false })
   if (activeOnly) query = query.is('archived_at', null)
   const { data, error } = await query
-  if (error) throw error
+  if (error) throwDb(error)
   if (!data?.length) return []
   const ids = data.map((d) => d.id)
   const { volByDep, orgByDep } = await loadSurveyRowsByDeployment(ids)
@@ -142,7 +151,7 @@ export async function fetchVolunteers() {
     .select('*')
     .is('archived_at', null)
     .order('full_name')
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
@@ -152,19 +161,19 @@ export async function fetchOrganisations() {
     .select('*')
     .is('archived_at', null)
     .order('name')
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
 export async function fetchVolunteer(id) {
   const { data, error } = await supabase.from('volunteers').select('*').eq('id', id).single()
-  if (error) throw error
+  if (error) throwDb(error)
   const { data: deps, error: depErr } = await supabase
     .from('deployments')
     .select(DEPLOYMENT_DETAIL_SELECT)
     .eq('volunteer_id', id)
     .order('start_date', { ascending: false })
-  if (depErr) throw depErr
+  if (depErr) throwDb(depErr)
   const ids = (deps ?? []).map((d) => d.id)
   const { volByDep, orgByDep } = await loadFullSurveyRowsByDeployment(ids)
   return {
@@ -177,13 +186,13 @@ export async function fetchVolunteer(id) {
 
 export async function fetchOrganisation(id) {
   const { data, error } = await supabase.from('organisations').select('*').eq('id', id).single()
-  if (error) throw error
+  if (error) throwDb(error)
   const { data: deps, error: depErr } = await supabase
     .from('deployments')
     .select(DEPLOYMENT_DETAIL_SELECT)
     .eq('organisation_id', id)
     .order('start_date', { ascending: false })
-  if (depErr) throw depErr
+  if (depErr) throwDb(depErr)
   const ids = (deps ?? []).map((d) => d.id)
   const { volByDep, orgByDep } = await loadFullSurveyRowsByDeployment(ids)
   return {
@@ -203,19 +212,19 @@ export async function createVolunteer(payload) {
     email: payload.email,
     phone: payload.phone || null,
   }).select().single()
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
 export async function createOrganisation(payload) {
   const { data, error } = await supabase.from('organisations').insert(payload).select().single()
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
 export async function createDeployment(payload) {
   const { data, error } = await supabase.from('deployments').insert(payload).select().single()
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
@@ -233,7 +242,7 @@ export async function createSurveyTokens(deploymentId, endDate, expiresDays = 14
   const { error } = await supabase
     .from('survey_tokens')
     .upsert(rows, { onConflict: 'deployment_id,type' })
-  if (error) throw error
+  if (error) throwDb(error)
   const { data } = await supabase
     .from('survey_tokens')
     .select('type, token')
@@ -250,7 +259,7 @@ export async function updateDeploymentStatus(id, status) {
     .eq('id', id)
     .select()
     .single()
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
@@ -261,7 +270,7 @@ export async function archiveDeployment(id) {
     .eq('id', id)
     .select()
     .single()
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
@@ -272,7 +281,7 @@ export async function archiveVolunteer(id) {
     .eq('id', id)
     .select()
     .single()
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
@@ -283,7 +292,7 @@ export async function archiveOrganisation(id) {
     .eq('id', id)
     .select()
     .single()
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
@@ -366,23 +375,29 @@ function responseTable(key) {
 async function countResponses(survey) {
   if (survey.is_builtin) {
     const table = responseTable(survey.key)
-    const [{ count }, latest] = await Promise.all([
+    const [{ count, error: countErr }, { data: latestRows, error: latestErr }] = await Promise.all([
       supabase.from(table).select('id', { count: 'exact', head: true }),
       supabase.from(table).select('submitted_at').order('submitted_at', { ascending: false }).limit(1),
     ])
-    return { responseCount: count ?? 0, lastResponseAt: latest?.data?.[0]?.submitted_at ?? null }
+    if (countErr) throwDb(countErr)
+    if (latestErr) throwDb(latestErr)
+    return { responseCount: count ?? 0, lastResponseAt: latestRows?.[0]?.submitted_at ?? null }
   }
-  const [{ count }, latest] = await Promise.all([
+  const [{ count, error: countErr }, { data: latestRows, error: latestErr }] = await Promise.all([
     supabase.from('survey_responses').select('id', { count: 'exact', head: true }).eq('survey_id', survey.id),
     supabase.from('survey_responses').select('submitted_at').eq('survey_id', survey.id).order('submitted_at', { ascending: false }).limit(1),
   ])
-  return { responseCount: count ?? 0, lastResponseAt: latest?.data?.[0]?.submitted_at ?? null }
+  if (countErr) throwDb(countErr)
+  if (latestErr) throwDb(latestErr)
+  return { responseCount: count ?? 0, lastResponseAt: latestRows?.[0]?.submitted_at ?? null }
 }
 
 // List surveys (built-in + custom) enriched with live response counts and the
 // most recent submission. Falls back to virtual instruments if not migrated.
-export async function fetchSurveys() {
-  await supabase.rpc('publish_due_surveys').catch(() => {})
+export async function fetchSurveys({ publishDue = false } = {}) {
+  if (publishDue) {
+    await supabase.rpc('publish_due_surveys').catch(() => {})
+  }
 
   let surveys
   const { data, error } = await supabase.from('surveys').select('*').order('is_builtin', { ascending: false }).order('created_at', { ascending: true })
@@ -391,7 +406,7 @@ export async function fetchSurveys() {
     if (isMissingTableError(error)) {
       surveys = VIRTUAL_SURVEYS.map((s) => ({ ...s }))
     } else {
-      throw error
+      throwDb(error)
     }
   } else if (!data || data.length === 0) {
     surveys = VIRTUAL_SURVEYS.map((s) => ({ ...s }))
@@ -400,7 +415,7 @@ export async function fetchSurveys() {
   }
 
   return Promise.all(
-    surveys.map(async (s) => ({ ...s, ...(await countResponses(s).catch(() => ({ responseCount: 0, lastResponseAt: null }))) }))
+    surveys.map(async (s) => ({ ...s, ...(await countResponses(s)) }))
   )
 }
 
@@ -410,7 +425,7 @@ export async function updateSurvey(id, patch) {
   if (patch.status === 'CLOSED') next.closed_at = patch.closed_at ?? new Date().toISOString()
   if (patch.status && patch.status !== 'SCHEDULED') next.scheduled_at = patch.scheduled_at ?? null
   const { data, error } = await supabase.from('surveys').update(next).eq('id', id).select().single()
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
@@ -436,13 +451,13 @@ export async function createSurvey({ title, description, audience, definition, s
   }
   if (status === 'PUBLISHED') insert.published_at = new Date().toISOString()
   const { data, error } = await supabase.from('surveys').insert(insert).select().single()
-  if (error) throw error
+  if (error) throwDb(error)
   return data
 }
 
 export async function deleteSurvey(id) {
   const { error } = await supabase.from('surveys').delete().eq('id', id)
-  if (error) throw error
+  if (error) throwDb(error)
   return true
 }
 
@@ -461,7 +476,7 @@ export async function fetchSurveyResponses(survey) {
          )`
       )
       .order('submitted_at', { ascending: false })
-    if (error) throw error
+    if (error) throwDb(error)
     return (data ?? []).map((r) => {
       const dep = r.deployments || {}
       return { ...r, deployment: dep, volunteer: one(dep.volunteers), organisation: one(dep.organisations) }
@@ -473,7 +488,7 @@ export async function fetchSurveyResponses(survey) {
     .select('*')
     .eq('survey_id', survey.id)
     .order('submitted_at', { ascending: false })
-  if (error) throw error
+  if (error) throwDb(error)
   return (data ?? []).map((r) => ({
     id: r.id,
     submitted_at: r.submitted_at,

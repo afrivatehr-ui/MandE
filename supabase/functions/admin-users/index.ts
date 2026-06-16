@@ -143,7 +143,12 @@ Deno.serve(async (req) => {
         .update({ status: 'APPROVED', reviewed_at: new Date().toISOString(), user_id: userId })
         .eq('id', requestId)
 
-      if (updErr) return json({ success: false, error: updErr.message }, 400)
+      if (updErr) {
+        if (!reqRow.user_id && userId) {
+          await admin.auth.admin.deleteUser(userId).catch(() => {})
+        }
+        return json({ success: false, error: updErr.message }, 400)
+      }
       return json({ success: true, data: { id: userId, emailSent: true } })
     }
 
@@ -201,14 +206,15 @@ Deno.serve(async (req) => {
         .eq('id', userId)
         .maybeSingle()
 
+      const { error: authErr } = await admin.auth.admin.deleteUser(userId)
+      if (authErr) return json({ success: false, error: authErr.message }, 400)
+
       await admin.from('access_requests').delete().eq('user_id', userId)
       if (targetProfile?.email) {
         await admin.from('access_requests').delete().eq('email', targetProfile.email)
       }
       await admin.from('profiles').delete().eq('id', userId)
 
-      const { error } = await admin.auth.admin.deleteUser(userId)
-      if (error) return json({ success: false, error: error.message }, 400)
       return json({ success: true, data: { deleted: userId } })
     }
 

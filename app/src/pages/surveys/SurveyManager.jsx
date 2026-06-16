@@ -7,6 +7,7 @@ import SurveyAnswers from '../../components/survey/SurveyAnswers'
 import { fetchSurveyResponses, updateSurvey, getSurveyConfig } from '../../api/data'
 import { downloadSurveyResponsesCsv } from '../../utils/csv'
 import { toast } from '../../store/toastStore'
+import { copyToClipboard } from '../../utils/mapApiError'
 
 export const SURVEY_STATUSES = ['DRAFT', 'SCHEDULED', 'PUBLISHED', 'CLOSED']
 
@@ -524,9 +525,13 @@ function SettingsTab({ survey, canWrite, onClose }) {
             <input readOnly value={`${window.location.origin}/survey/custom/${survey.id}`} className="afri-input flex-1 text-xs" onFocus={(e) => e.target.select()} />
             <button
               type="button"
-              onClick={() => {
-                navigator.clipboard?.writeText(`${window.location.origin}/survey/custom/${survey.id}`)
-                toast.success('Survey link copied.')
+              onClick={async () => {
+                try {
+                  await copyToClipboard(`${window.location.origin}/survey/custom/${survey.id}`)
+                  toast.success('Survey link copied.')
+                } catch {
+                  toast.error('Could not copy link. Select and copy manually.')
+                }
               }}
               className="afri-btn-secondary !py-2 text-xs"
             >

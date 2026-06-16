@@ -5,6 +5,7 @@ export const BRAND = {
   lavender: '#F0E7F6',
   blue: '#1D45CF',
   green: '#317D34',
+  orange: '#E87722',
   ink: '#1A1A1A',
   muted: '#6B6B6B',
 }
@@ -104,6 +105,11 @@ export function h1(text: string) {
 
 export function p(text: string) {
   return `<p style="margin:0 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:${BRAND.ink};">${text}</p>`
+}
+
+/** Amber callout for security-sensitive notifications. */
+export function securityAlert(text: string) {
+  return `<p style="margin:16px 0;padding:12px 14px;background-color:#FFF8E6;border-left:3px solid ${BRAND.orange};font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:${BRAND.ink};">${text}</p>`
 }
 
 export function authConfirmationUrl(

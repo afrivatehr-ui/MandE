@@ -153,7 +153,7 @@ export default function Settings() {
                       Requested: {ROLE_LABELS[req.role_requested] ?? req.role_requested}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <select
                       value={approveRoles[req.id] ?? req.role_requested}
                       onChange={(e) => setApproveRoles((prev) => ({ ...prev, [req.id]: e.target.value }))}
@@ -266,7 +266,14 @@ export default function Settings() {
               />
             </div>
             <button
-              onClick={() => expiryMutation.mutate(Number(expiryInput))}
+              onClick={() => {
+                const days = Number(expiryInput)
+                if (!Number.isInteger(days) || days < 1 || days > 365) {
+                  toast.error('Enter a whole number between 1 and 365.')
+                  return
+                }
+                expiryMutation.mutate(days)
+              }}
               disabled={expiryMutation.isPending}
               className="afri-btn-primary"
             >
@@ -318,7 +325,11 @@ function InviteForm({ onInvite, busy }) {
 
   function handleInvite() {
     if (!valid || busy) return
-    onInvite(form)
+    onInvite({
+      name: form.name.trim(),
+      email: form.email.trim().toLowerCase(),
+      role: form.role,
+    })
   }
 
   return (

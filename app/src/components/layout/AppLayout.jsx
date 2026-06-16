@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { useAuthStore, isAdmin, isWriter, ROLE_LABELS } from '../../store/authStore'
+import { useAuthStore, isAdmin, ROLE_LABELS } from '../../store/authStore'
 import { useIdleLogout } from '../../hooks/useIdleLogout'
 import Logo from '../Logo'
 
@@ -10,7 +10,7 @@ const NAV = [
   { to: '/organisations', label: 'Organisations', icon: BuildingIcon },
   { to: '/deployments', label: 'Deployments', icon: SendIcon },
   { to: '/reports', label: 'Reports', icon: ChartIcon },
-  { to: '/surveys', label: 'Surveys', icon: ClipboardIcon, writerOnly: true },
+  { to: '/surveys', label: 'Surveys', icon: ClipboardIcon },
 ]
 
 export default function AppLayout() {
@@ -22,7 +22,7 @@ export default function AppLayout() {
 
   const role = profile?.role
   const nav = [
-    ...NAV.filter((item) => !item.writerOnly || isWriter(role)),
+    ...NAV,
     ...(isAdmin(role) ? [{ to: '/settings', label: 'Settings', icon: CogIcon }] : []),
   ]
 

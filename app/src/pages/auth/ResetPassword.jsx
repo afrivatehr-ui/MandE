@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
+import { toast } from '../../store/toastStore'
 import AuthCard from '../../components/auth/AuthCard'
 import PasswordInput from '../../components/PasswordInput'
 import Spinner from '../../components/Spinner'
@@ -62,6 +63,7 @@ export default function ResetPassword() {
     setSubmitting(true)
     try {
       await updatePassword(password)
+      toast.success('Password updated. We sent a confirmation email to your inbox.')
       navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(err?.message || 'Could not update password. Request a new reset link and try again.')

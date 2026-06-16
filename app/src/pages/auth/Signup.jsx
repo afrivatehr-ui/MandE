@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Navigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import AuthCard from '../../components/auth/AuthCard'
-import Spinner from '../../components/Spinner'
+import Spinner, { FullPageSpinner } from '../../components/Spinner'
 import { submitAccessRequest } from '../../api/access'
 
 export default function Signup() {
@@ -18,7 +18,8 @@ export default function Signup() {
   const [success, setSuccess] = useState(false)
   const [successWarning, setSuccessWarning] = useState('')
 
-  if (bootstrapped && session) return <Navigate to="/dashboard" replace />
+  if (!bootstrapped) return <FullPageSpinner label="Loading" />
+  if (session) return <Navigate to="/dashboard" replace />
 
   const handleChange = (e) => {
     const { name, value } = e.target

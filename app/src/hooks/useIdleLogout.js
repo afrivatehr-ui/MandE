@@ -5,6 +5,7 @@ import { toast } from '../store/toastStore'
 
 const IDLE_MS = 10 * 60 * 1000 // 10 minutes
 const WARN_MS = 9 * 60 * 1000 // warn at 9 minutes
+const MOUSEMOVE_THROTTLE_MS = 30_000
 
 const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll', 'click']
 
@@ -17,6 +18,7 @@ export function useIdleLogout() {
   const signOut = useAuthStore((s) => s.signOut)
   const navigate = useNavigate()
   const lastActiveRef = useRef(Date.now())
+  const lastMouseRef = useRef(0)
   const timeoutRef = useRef(null)
   const warnRef = useRef(null)
   const signingOutRef = useRef(false)
@@ -54,6 +56,13 @@ export function useIdleLogout() {
       scheduleLogout()
     }
 
+    function onMouseMove() {
+      const now = Date.now()
+      if (now - lastMouseRef.current < MOUSEMOVE_THROTTLE_MS) return
+      lastMouseRef.current = now
+      recordActivity()
+    }
+
     function onVisibilityChange() {
       if (document.visibilityState !== 'visible') return
       if (Date.now() - lastActiveRef.current >= IDLE_MS) {
@@ -64,6 +73,7 @@ export function useIdleLogout() {
     }
 
     ACTIVITY_EVENTS.forEach((event) => window.addEventListener(event, recordActivity, { passive: true }))
+    window.addEventListener('mousemove', onMouseMove, { passive: true })
     document.addEventListener('visibilitychange', onVisibilityChange)
     scheduleLogout()
 
@@ -71,6 +81,7 @@ export function useIdleLogout() {
       clearTimeout(timeoutRef.current)
       clearTimeout(warnRef.current)
       ACTIVITY_EVENTS.forEach((event) => window.removeEventListener(event, recordActivity))
+      window.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [session, signOut, navigate])

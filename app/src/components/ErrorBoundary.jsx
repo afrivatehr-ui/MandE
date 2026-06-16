@@ -11,6 +11,10 @@ export default class ErrorBoundary extends Component {
     return { error }
   }
 
+  componentDidCatch(error, info) {
+    console.error('Application error:', error, info)
+  }
+
   render() {
     if (this.state.error) {
       return (
@@ -18,7 +22,7 @@ export default class ErrorBoundary extends Component {
           <div className="w-full max-w-md rounded-card bg-afri-white p-8 shadow-card">
             <h1 className="font-heading text-h2 text-afri-purple">Something went wrong</h1>
             <p className="afri-muted mt-3 text-sm">
-              The page hit an unexpected error. Try refreshing, or return to the dashboard.
+              The page hit an unexpected error. Try refreshing, or return to a safe page.
             </p>
             <div className="mt-6 flex flex-col gap-3">
               <button
@@ -28,8 +32,11 @@ export default class ErrorBoundary extends Component {
               >
                 Refresh page
               </button>
-              <Link to="/dashboard" className="afri-btn-secondary w-full text-center">
-                Go to dashboard
+              <Link to="/" className="afri-btn-secondary w-full text-center">
+                Go to home
+              </Link>
+              <Link to="/login" className="afri-btn-secondary w-full text-center">
+                Sign in
               </Link>
             </div>
           </div>

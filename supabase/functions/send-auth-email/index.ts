@@ -1,14 +1,18 @@
 // =============================================================================
-// Afrivate M&E — Auth email hook (confirm email, password reset, magic link).
+// Afrivate M&E — Auth email hook (confirm email, password reset, magic link,
+// and security notifications such as password changed).
 //
 // Enable in Supabase Dashboard → Authentication → Hooks → Send Email → HTTPS:
 //   URL: https://<project-ref>.supabase.co/functions/v1/send-auth-email
 //   Generate secret → set as SEND_EMAIL_HOOK_SECRET on this function.
 //
-// Deploy: supabase functions deploy send-auth-email --no-verify-jwt
+// Also enable security notifications under Authentication → Email Templates
+// (e.g. "Password changed").
+//
+// Deploy: npx supabase functions deploy send-auth-email --no-verify-jwt
 // =============================================================================
 import { Webhook } from 'https://esm.sh/standardwebhooks@1.0.0'
-import nodemailer from 'npm:nodemailer@6.9.15'
+import { escapeHtml, parseFrom, sendTransactionalMail } from '../_shared/mail-transport.ts'
 import {
   authConfirmationUrl,
   BRAND,
@@ -16,22 +20,13 @@ import {
   fallbackLink,
   h1,
   p,
+  securityAlert,
   shell,
 } from '../_shared/email-shell.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-const smtpHost = Deno.env.get('SMTP_HOST') ?? 'smtp.gmail.com'
-const smtpPort = Number(Deno.env.get('SMTP_PORT') ?? '587')
-const smtpUser = Deno.env.get('SMTP_USER') ?? ''
-const smtpPass = Deno.env.get('SMTP_PASS') ?? ''
 const appUrl = (Deno.env.get('APP_URL') ?? 'http://localhost:5173').replace(/\/$/, '')
 const logoUrl = (Deno.env.get('LOGO_URL') ?? `${appUrl}/logos/afrivate-full-logo-purple.png`).replace(/\/$/, '')
-
-function parseFrom(s: string): { fromName?: string; fromEmail: string } {
-  const m = s.match(/^\s*(.*?)\s*<\s*([^>]+?)\s*>\s*$/)
-  if (m) return { fromName: m[1] || undefined, fromEmail: m[2] }
-  return { fromEmail: s.trim() }
-}
 
 const { fromName, fromEmail } = parseFrom(
   Deno.env.get('EMAIL_FROM') ?? 'Afrivate M&E <afrivatehr@gmail.com>',
@@ -45,6 +40,9 @@ type EmailData = {
   site_url: string
   token_new: string
   token_hash_new: string
+  old_email?: string
+  provider?: string
+  factor_type?: string
 }
 
 type AuthUser = {
@@ -60,7 +58,24 @@ const SUBJECTS: Record<string, string> = {
   email_change: 'Confirm your new email address',
   email_change_new: 'Confirm your new email address',
   reauthentication: 'Your Afrivate verification code',
+  password_changed_notification: 'Your Afrivate M&E password was changed',
+  email_changed_notification: 'Your Afrivate M&E email address was changed',
+  phone_changed_notification: 'Your Afrivate M&E phone number was changed',
+  identity_linked_notification: 'A sign-in method was linked to your Afrivate M&E account',
+  identity_unlinked_notification: 'A sign-in method was removed from your Afrivate M&E account',
+  mfa_factor_enrolled_notification: 'A verification method was added to your Afrivate M&E account',
+  mfa_factor_unenrolled_notification: 'A verification method was removed from your Afrivate M&E account',
 }
+
+const SECURITY_NOTIFICATIONS = new Set([
+  'password_changed_notification',
+  'email_changed_notification',
+  'phone_changed_notification',
+  'identity_linked_notification',
+  'identity_unlinked_notification',
+  'mfa_factor_enrolled_notification',
+  'mfa_factor_unenrolled_notification',
+])
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
@@ -96,29 +111,28 @@ Deno.serve(async (req) => {
   }
 
   const action = email_data.email_action_type
-  const confirmUrl = authConfirmationUrl(supabaseUrl, email_data)
   const firstName = (user.user_metadata?.name ?? user.user_metadata?.full_name ?? 'there').split(' ')[0]
-  const { subject, html, text } = buildAuthEmail(action, { firstName, confirmUrl, token: email_data.token })
+  const confirmUrl = SECURITY_NOTIFICATIONS.has(action)
+    ? ''
+    : authConfirmationUrl(supabaseUrl, email_data)
+  const { subject, html, text } = buildAuthEmail(action, {
+    firstName,
+    confirmUrl,
+    token: email_data.token,
+    email: user.email,
+    emailData: email_data,
+  })
 
   try {
-    if (!smtpUser || !smtpPass) {
-      throw new Error('SMTP_USER and SMTP_PASS must be set on the Edge Function.')
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465,
-      auth: { user: smtpUser, pass: smtpPass },
-    })
-
-    await transporter.sendMail({
-      from: fromName ? `"${fromName}" <${fromEmail}>` : fromEmail,
+    await sendTransactionalMail({
+      fromName,
+      fromEmail,
       to: user.email,
       subject,
       html,
       text,
       replyTo: fromEmail,
+      category: `auth-${action}`,
     })
   } catch (err) {
     return new Response(JSON.stringify({ error: { message: String((err as Error)?.message ?? err) } }), {
@@ -135,15 +149,24 @@ Deno.serve(async (req) => {
 
 function buildAuthEmail(
   action: string,
-  opts: { firstName: string; confirmUrl: string; token: string },
+  opts: {
+    firstName: string
+    confirmUrl: string
+    token: string
+    email: string
+    emailData: EmailData
+  },
 ): { subject: string; html: string; text: string } {
-  const { firstName, confirmUrl, token } = opts
+  const { firstName, confirmUrl, token, email, emailData } = opts
   const subject = SUBJECTS[action] ?? 'Afrivate M&E notification'
+  const forgotPasswordUrl = `${appUrl}/forgot-password`
+  const loginUrl = `${appUrl}/login`
+  const changedAt = new Date().toUTCString()
 
   switch (action) {
     case 'signup': {
       const body = `
-        ${h1(`Welcome, ${firstName}!`)}
+        ${h1(`Welcome, ${escapeHtml(firstName)}!`)}
         ${p('Thanks for requesting access to the Afrivate Monitoring &amp; Evaluation platform. Please confirm your email address to complete registration. An administrator will review your access request after confirmation.')}
         ${button(confirmUrl, 'Confirm my email →', BRAND.purple)}
         ${p('This link expires shortly and can only be used once.')}
@@ -220,6 +243,27 @@ function buildAuthEmail(
       }
     }
 
+    case 'email_change':
+    case 'email_change_new': {
+      const body = `
+        ${h1('Confirm your new email')}
+        ${p(`Hi ${firstName}, please confirm your new email address for Afrivate M&amp;E.`)}
+        ${button(confirmUrl, 'Confirm new email →', BRAND.purple)}
+        ${p('If you did not request this change, you can safely ignore this email.')}
+        ${fallbackLink(confirmUrl)}`
+      return {
+        subject,
+        html: shell({
+          preheader: 'Confirm your new email address for Afrivate M&E.',
+          accent: BRAND.purple,
+          body,
+          logoUrl,
+          footerNote: 'You received this because an email change was requested for your account.',
+        }),
+        text: `Confirm your new email: ${confirmUrl}\n\nAfriVate Technologies Ltd.`,
+      }
+    }
+
     case 'reauthentication': {
       const body = `
         ${h1('Verification code')}
@@ -237,16 +281,136 @@ function buildAuthEmail(
       }
     }
 
-    default: {
+    case 'password_changed_notification': {
       const body = `
-        ${h1('Action required')}
+        ${h1('Your password was changed')}
+        ${p(`Hi ${firstName}, the password for your Afrivate M&amp;E account (<strong>${email}</strong>) was recently updated.`)}
+        ${p(`<strong>When:</strong> ${changedAt}`)}
+        ${p('If you made this change, no further action is needed. You can sign in with your new password whenever you are ready.')}
+        ${securityAlert('<strong>Did not change your password?</strong> Someone else may have access to your account. Reset your password immediately and contact your Afrivate administrator.')}
+        ${button(forgotPasswordUrl, 'Reset my password →', BRAND.orange)}
+        ${button(loginUrl, 'Sign in to Afrivate M&E →', BRAND.purple)}`
+      return {
+        subject,
+        html: shell({
+          preheader: 'Your Afrivate M&E password was recently changed.',
+          accent: BRAND.orange,
+          body,
+          logoUrl,
+          footerNote:
+            'You received this security notification because the password on your Afrivate M&E account was changed.',
+        }),
+        text: [
+          `Hi ${firstName},`,
+          '',
+          `The password for your Afrivate M&E account (${email}) was recently changed.`,
+          `When: ${changedAt}`,
+          '',
+          'If you made this change, no action is needed.',
+          '',
+          'If you did NOT change your password, reset it immediately:',
+          forgotPasswordUrl,
+          '',
+          'AfriVate Technologies Ltd.',
+        ].join('\n'),
+      }
+    }
+
+    case 'email_changed_notification': {
+      const oldEmail = emailData.old_email ?? 'your previous address'
+      const body = `
+        ${h1('Your email address was changed')}
+        ${p(`Hi ${firstName}, the email address on your Afrivate M&amp;E account was updated.`)}
+        ${p(`<strong>Previous:</strong> ${oldEmail}<br><strong>Current:</strong> ${email}`)}
+        ${securityAlert('<strong>Did not make this change?</strong> Contact your Afrivate administrator immediately.')}
+        ${button(loginUrl, 'Sign in to Afrivate M&E →', BRAND.purple)}`
+      return {
+        subject,
+        html: shell({
+          preheader: 'The email address on your Afrivate M&E account was changed.',
+          accent: BRAND.orange,
+          body,
+          logoUrl,
+          footerNote: 'You received this security notification because your account email address was changed.',
+        }),
+        text: `Your email was changed from ${oldEmail} to ${email}.\n\nIf you did not make this change, contact your administrator.\n\nAfriVate Technologies Ltd.`,
+      }
+    }
+
+    case 'identity_linked_notification': {
+      const provider = emailData.provider ?? 'a sign-in provider'
+      const body = `
+        ${h1('Sign-in method linked')}
+        ${p(`Hi ${firstName}, <strong>${provider}</strong> was linked to your Afrivate M&amp;E account (${email}).`)}
+        ${securityAlert('<strong>Did not link this method?</strong> Contact your Afrivate administrator immediately.')}
+        ${button(loginUrl, 'Sign in to Afrivate M&E →', BRAND.purple)}`
+      return {
+        subject,
+        html: shell({
+          preheader: 'A new sign-in method was linked to your Afrivate M&E account.',
+          accent: BRAND.orange,
+          body,
+          logoUrl,
+        }),
+        text: `${provider} was linked to ${email}.\n\nAfriVate Technologies Ltd.`,
+      }
+    }
+
+    case 'identity_unlinked_notification': {
+      const provider = emailData.provider ?? 'a sign-in provider'
+      const body = `
+        ${h1('Sign-in method removed')}
+        ${p(`Hi ${firstName}, <strong>${provider}</strong> was removed from your Afrivate M&amp;E account (${email}).`)}
+        ${securityAlert('<strong>Did not remove this method?</strong> Contact your Afrivate administrator immediately.')}
+        ${button(loginUrl, 'Sign in to Afrivate M&E →', BRAND.purple)}`
+      return {
+        subject,
+        html: shell({
+          preheader: 'A sign-in method was removed from your Afrivate M&E account.',
+          accent: BRAND.orange,
+          body,
+          logoUrl,
+        }),
+        text: `${provider} was removed from ${email}.\n\nAfriVate Technologies Ltd.`,
+      }
+    }
+
+    case 'mfa_factor_enrolled_notification':
+    case 'mfa_factor_unenrolled_notification': {
+      const factor = emailData.factor_type ?? 'verification method'
+      const enrolled = action === 'mfa_factor_enrolled_notification'
+      const body = `
+        ${h1(enrolled ? 'Verification method added' : 'Verification method removed')}
+        ${p(`Hi ${firstName}, <strong>${factor}</strong> was ${enrolled ? 'added to' : 'removed from'} your Afrivate M&amp;E account (${email}).`)}
+        ${securityAlert('<strong>Was this not you?</strong> Contact your Afrivate administrator immediately.')}
+        ${button(loginUrl, 'Sign in to Afrivate M&E →', BRAND.purple)}`
+      return {
+        subject,
+        html: shell({
+          preheader: enrolled
+            ? 'A verification method was added to your Afrivate M&E account.'
+            : 'A verification method was removed from your Afrivate M&E account.',
+          accent: BRAND.orange,
+          body,
+          logoUrl,
+        }),
+        text: `${factor} was ${enrolled ? 'added to' : 'removed from'} ${email}.\n\nAfriVate Technologies Ltd.`,
+      }
+    }
+
+    default: {
+      const body = confirmUrl
+        ? `${h1('Action required')}
         ${p('Please follow the link below to continue.')}
         ${button(confirmUrl, 'Continue →', BRAND.purple)}
         ${fallbackLink(confirmUrl)}`
+        : `${h1('Account notification')}
+        ${p('A change was made to your Afrivate M&amp;E account. If this was unexpected, contact your administrator.')}
+        ${button(loginUrl, 'Sign in to Afrivate M&E →', BRAND.purple)}`
       return {
         subject,
-        html: shell({ preheader: 'Action required on your Afrivate M&E account.', accent: BRAND.purple, body, logoUrl }),
-        text: `Continue: ${confirmUrl}`,
+        html: shell({ preheader: 'Notification about your Afrivate M&E account.', accent: BRAND.purple, body, logoUrl }),
+        text: confirmUrl ? `Continue: ${confirmUrl}` : `Sign in: ${loginUrl}`,
       }
     }
   }

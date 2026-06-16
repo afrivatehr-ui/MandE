@@ -42,9 +42,12 @@ export default function DeploymentActions({
       <ActionBtn label="View volunteer profile" onClick={onView}>
         View
       </ActionBtn>
-      <ActionBtn label="Copy survey links" onClick={onCopyLinks}>
-        Links
-      </ActionBtn>
+
+      {canWrite && (
+        <ActionBtn label="Copy survey links" onClick={onCopyLinks}>
+          Links
+        </ActionBtn>
+      )}
 
       {canWrite && emailOptions.length > 0 && (
         <div className="relative" ref={menuRef}>
@@ -57,7 +60,7 @@ export default function DeploymentActions({
             Send email
           </ActionBtn>
           {emailOpen && (
-            <div className="absolute right-0 z-20 mt-1 min-w-[11rem] overflow-hidden rounded-lg border border-afri-lavender bg-afri-white shadow-card dark:border-afri-purple-light/30 dark:bg-afri-purple-elevated">
+            <div className="absolute right-0 z-20 mt-1 min-w-[11rem] overflow-hidden rounded-lg border border-afri-lavender bg-afri-white shadow-card">
               {emailOptions.map((opt) => (
                 <button
                   key={opt.id}
@@ -71,7 +74,7 @@ export default function DeploymentActions({
                         : [opt.id]
                     onSendEmail(types)
                   }}
-                  className="block w-full px-3 py-2.5 text-left font-body text-sm text-afri-black transition-colors hover:bg-afri-lavender/60 disabled:opacity-50 dark:text-afri-white dark:hover:bg-afri-purple-light/20"
+                  className="block w-full px-3 py-2.5 text-left font-body text-sm text-afri-black transition-colors hover:bg-afri-lavender/60 disabled:opacity-50"
                 >
                   {opt.label}
                 </button>
@@ -105,8 +108,8 @@ function ActionBtn({ children, onClick, label, busy, danger, hasMenu }) {
       disabled={busy}
       className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-body text-xs font-medium transition-colors disabled:opacity-50 ${
         danger
-          ? 'text-afri-red hover:bg-afri-red/10 dark:text-afri-red dark:hover:bg-afri-red/15'
-          : 'text-afri-purple hover:bg-afri-lavender dark:text-afri-lavender dark:hover:bg-afri-purple-light/20'
+          ? 'text-afri-red hover:bg-afri-red/10'
+          : 'text-afri-purple hover:bg-afri-lavender'
       }`}
     >
       {children}

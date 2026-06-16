@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
 
       // Custom (non-deployment) survey submission.
       if (body?.survey_id) {
-        return await submitCustom(supabase, body)
+        return await submitCustom(supabase, body, req)
       }
 
       if (!body?.token) return json({ success: false, error: 'Missing token.' }, 400)
@@ -175,10 +175,13 @@ async function loadCustomSurvey(supabase: ReturnType<typeof createClient>, id: s
 
   if (error || !survey) return { error: 'This survey link is invalid.', status: 404 }
   if (survey.is_builtin) return { error: 'This survey is not available via a public link.', status: 400 }
+  if (survey.status !== 'PUBLISHED') {
+    return { error: 'This survey is not currently open for responses.', status: 404 }
+  }
 
   return {
     custom: true,
-    accepting: survey.status === 'PUBLISHED',
+    accepting: true,
     survey: {
       id: survey.id,
       title: survey.title,
@@ -200,7 +203,56 @@ function customRequiredKeys(definition: Record<string, unknown>): string[] {
   return keys
 }
 
-async function submitCustom(supabase: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+function validateCustomAnswers(
+  definition: Record<string, unknown>,
+  answers: Record<string, unknown>,
+): string | null {
+  const def = definition as {
+    likertSections?: { questions?: { key: string }[] }[]
+    overall?: { sliders?: { key: string; min?: number; max?: number }[]; radios?: { key: string; options?: string[] }[] }
+  }
+  const MAX_TEXT = 8000
+  const keys = Object.keys(answers).filter((k) => !k.startsWith('_'))
+  if (keys.length > 120) return 'Too many fields submitted.'
+
+  for (const key of keys) {
+    const v = answers[key]
+    if (typeof v === 'string' && v.length > MAX_TEXT) return 'One or more answers are too long.'
+  }
+
+  for (const section of def.likertSections ?? []) {
+    for (const q of section.questions ?? []) {
+      if (!(q.key in answers) || answers[q.key] === '' || answers[q.key] == null) continue
+      const n = Number(answers[q.key])
+      if (!Number.isFinite(n) || n < 1 || n > 5) return 'Please choose a valid rating (1–5) for each question.'
+    }
+  }
+
+  for (const s of def.overall?.sliders ?? []) {
+    if (!(s.key in answers) || answers[s.key] === '' || answers[s.key] == null) continue
+    const n = Number(answers[s.key])
+    const min = s.min ?? 0
+    const max = s.max ?? 10
+    if (!Number.isFinite(n) || n < min || n > max) {
+      return `Please enter a value between ${min} and ${max}.`
+    }
+  }
+
+  for (const r of def.overall?.radios ?? []) {
+    if (!(r.key in answers) || answers[r.key] === '' || answers[r.key] == null) continue
+    if (r.options?.length && !r.options.includes(String(answers[r.key]))) {
+      return 'Please select a valid option.'
+    }
+  }
+
+  return null
+}
+
+async function submitCustom(
+  supabase: ReturnType<typeof createClient>,
+  body: Record<string, unknown>,
+  req: Request,
+) {
   const surveyId = body.survey_id as string
   const ctx = await loadCustomSurvey(supabase, surveyId)
   if ('error' in ctx) return json({ success: false, error: ctx.error }, ctx.status)
@@ -210,6 +262,18 @@ async function submitCustom(supabase: ReturnType<typeof createClient>, body: Rec
 
   const answers = (body.answers ?? {}) as Record<string, unknown>
   const respondentEmail = String(body.respondent_email ?? '').trim().toLowerCase()
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+
+  const { count: hourlyCount } = await supabase
+    .from('survey_responses')
+    .select('id', { count: 'exact', head: true })
+    .eq('survey_id', surveyId)
+    .gte('submitted_at', oneHourAgo)
+
+  if ((hourlyCount ?? 0) >= 30) {
+    return json({ success: false, error: 'This survey is receiving too many responses. Please try again later.' }, 429)
+  }
+
   if (respondentEmail) {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const { count } = await supabase
@@ -221,6 +285,24 @@ async function submitCustom(supabase: ReturnType<typeof createClient>, body: Rec
     if ((count ?? 0) >= 5) {
       return json({ success: false, error: 'Too many submissions from this email today. Please try again tomorrow.' }, 429)
     }
+  } else {
+    const clientIp =
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || req.headers.get('x-real-ip')
+      || req.headers.get('cf-connecting-ip')
+      || ''
+    if (clientIp) {
+      const { count: ipCount } = await supabase
+        .from('survey_responses')
+        .select('id', { count: 'exact', head: true })
+        .eq('survey_id', surveyId)
+        .filter('answers->>_client_ip', 'eq', clientIp)
+        .gte('submitted_at', oneHourAgo)
+      if ((ipCount ?? 0) >= 5) {
+        return json({ success: false, error: 'Too many submissions from your network. Please try again later.' }, 429)
+      }
+      answers._client_ip = clientIp
+    }
   }
 
   const required = customRequiredKeys(ctx.survey.definition as Record<string, unknown>)
@@ -231,13 +313,22 @@ async function submitCustom(supabase: ReturnType<typeof createClient>, body: Rec
     }
   }
 
+  const validationError = validateCustomAnswers(ctx.survey.definition as Record<string, unknown>, answers)
+  if (validationError) return json({ success: false, error: validationError }, 400)
+
   const { error } = await supabase.from('survey_responses').insert({
     survey_id: surveyId,
     respondent_name: (body.respondent_name as string) ?? null,
     respondent_email: (body.respondent_email as string) ?? null,
     answers,
   })
-  if (error) return json({ success: false, error: error.message }, 500)
+  if (error) {
+    if (error.code === '23505') {
+      return json({ success: false, error: 'This survey has already been submitted.' }, 409)
+    }
+    console.error('survey insert failed:', error)
+    return json({ success: false, error: 'Could not save your response. Please try again.' }, 500)
+  }
   return json({ success: true, data: { submitted: true, custom: true } })
 }
 
@@ -256,15 +347,21 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
   const { data: deployment } = await supabase
     .from('deployments')
     .select(
-      'id, role_title, org_contact_role, start_date, end_date, volunteers ( volunteer_id, full_name ), organisations ( name )',
+      'id, role_title, org_contact_role, start_date, end_date, archived_at, volunteers ( volunteer_id, full_name, archived_at ), organisations ( name, archived_at )',
     )
     .eq('id', tokenRow.deployment_id)
     .single()
 
   if (!deployment) return { error: 'Deployment not found.', status: 404 }
+  if (deployment.archived_at) {
+    return { error: 'This deployment is no longer active.', status: 410 }
+  }
 
   const vol = one(deployment.volunteers)
   const org = one(deployment.organisations)
+  if (vol?.archived_at || org?.archived_at) {
+    return { error: 'This deployment is no longer active.', status: 410 }
+  }
 
   const table = tokenRow.type === 'org' ? 'org_surveys' : 'volunteer_surveys'
   const { data: existingSurvey } = await supabase

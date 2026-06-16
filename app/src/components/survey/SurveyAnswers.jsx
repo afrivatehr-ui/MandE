@@ -16,7 +16,7 @@ export default function SurveyAnswers({ survey, config }) {
     <div className="flex flex-col gap-5">
       {config.type === 'org' && (
         <p className="afri-muted font-body text-sm">
-          Completed by <span className="font-medium text-afri-purple dark:text-afri-lavender">{survey.supervisor_name || '—'}</span>
+          Completed by <span className="font-medium text-afri-purple">{survey.supervisor_name || '—'}</span>
           {survey.supervisor_title ? `, ${survey.supervisor_title}` : ''}
         </p>
       )}
@@ -26,9 +26,9 @@ export default function SurveyAnswers({ survey, config }) {
           <h4 className="mb-2 font-heading text-sm font-semibold">{section.title}</h4>
           <ul className="flex flex-col gap-1.5">
             {section.questions.map((q) => (
-              <li key={q.key} className="flex items-start justify-between gap-4 border-b border-afri-lavender/60 pb-1.5 dark:border-afri-purple-light/20">
+              <li key={q.key} className="flex items-start justify-between gap-4 border-b border-afri-lavender/60 pb-1.5">
                 <span className="afri-muted font-body text-sm">{q.text}</span>
-                <span className="shrink-0 font-heading text-sm font-medium text-afri-purple dark:text-afri-lavender">
+                <span className="shrink-0 font-heading text-sm font-medium text-afri-purple">
                   {fmt(survey[q.key], 5)}
                 </span>
               </li>
@@ -41,15 +41,15 @@ export default function SurveyAnswers({ survey, config }) {
         <h4 className="mb-2 font-heading text-sm font-semibold">{config.overall.title}</h4>
         <ul className="flex flex-col gap-1.5">
           {config.overall.sliders.map((s) => (
-            <li key={s.key} className="flex items-center justify-between gap-4 border-b border-afri-lavender/60 pb-1.5 dark:border-afri-purple-light/20">
+            <li key={s.key} className="flex items-center justify-between gap-4 border-b border-afri-lavender/60 pb-1.5">
               <span className="afri-muted font-body text-sm">{s.label}</span>
-              <span className="shrink-0 font-heading text-sm font-medium text-afri-purple dark:text-afri-lavender">
+              <span className="shrink-0 font-heading text-sm font-medium text-afri-purple">
                 {fmt(survey[s.key], s.max)}
               </span>
             </li>
           ))}
           {config.overall.radios.map((r) => (
-            <li key={r.key} className="flex items-center justify-between gap-4 border-b border-afri-lavender/60 pb-1.5 dark:border-afri-purple-light/20">
+            <li key={r.key} className="flex items-center justify-between gap-4 border-b border-afri-lavender/60 pb-1.5">
               <span className="afri-muted font-body text-sm">{r.label}</span>
               <span className="shrink-0 font-body text-sm font-medium">{survey[r.key] || '—'}</span>
             </li>
@@ -63,7 +63,7 @@ export default function SurveyAnswers({ survey, config }) {
           {config.feedback.fields.map((f) => (
             <div key={f.key}>
               <p className="afri-subtle font-body text-xs uppercase tracking-wide">{f.label}</p>
-              <p className="font-body text-sm text-afri-black/80 dark:text-afri-white/80">
+              <p className="font-body text-sm text-afri-black/80">
                 {survey[f.key] || <span className="afri-subtle">No response</span>}
               </p>
             </div>

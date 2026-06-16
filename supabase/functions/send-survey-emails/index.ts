@@ -11,7 +11,7 @@
 // skipped / missing) are returned so the app can report what actually happened.
 // =============================================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import nodemailer from 'npm:nodemailer@6.9.15'
+import { escapeHtml, isSmtpConfigured, parseFrom, sendTransactionalMail } from '../_shared/mail-transport.ts'
 import { BRAND, button, fallbackLink, h1, infoCard, p, shell } from '../_shared/email-shell.ts'
 
 const corsHeaders = {
@@ -29,10 +29,6 @@ function json(body: unknown, status = 200) {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-const smtpHost = Deno.env.get('SMTP_HOST') ?? 'smtp.gmail.com'
-const smtpPort = Number(Deno.env.get('SMTP_PORT') ?? '587')
-const smtpUser = Deno.env.get('SMTP_USER') ?? ''
-const smtpPass = Deno.env.get('SMTP_PASS') ?? ''
 const { fromName, fromEmail } = parseFrom(
   Deno.env.get('EMAIL_FROM') ?? 'Afrivate M&E <afrivatehr@gmail.com>',
 )
@@ -75,19 +71,31 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => null)
     const deploymentId = body?.deployment_id
-    const expiresDays = Number(body?.expires_days ?? 14)
+    let expiresDays = Number(body?.expires_days)
+    if (!Number.isFinite(expiresDays) || expiresDays < 1) {
+      const { data: settings } = await admin
+        .from('app_settings')
+        .select('survey_token_expiry_days')
+        .eq('id', 1)
+        .maybeSingle()
+      expiresDays = Number(settings?.survey_token_expiry_days ?? 14)
+    }
+    expiresDays = Math.min(365, Math.max(1, Math.round(expiresDays)))
     const requestedTypes = Array.isArray(body?.types) ? body.types as string[] : null
     if (!deploymentId) return json({ success: false, error: 'Missing deployment_id.' }, 400)
 
     const { data: deployment, error: depErr } = await admin
       .from('deployments')
       .select(
-        'id, role_title, org_contact_role, start_date, end_date, volunteer_id, organisation_id, volunteers ( full_name, email ), organisations ( name, contact_name, contact_email, contact_title )',
+        'id, role_title, org_contact_role, start_date, end_date, archived_at, volunteer_id, organisation_id, volunteers ( full_name, email, archived_at ), organisations ( name, contact_name, contact_email, contact_title, archived_at )',
       )
       .eq('id', deploymentId)
       .single()
 
     if (depErr || !deployment) return json({ success: false, error: 'Deployment not found.' }, 404)
+    if (deployment.archived_at) {
+      return json({ success: false, error: 'This deployment has been removed.' }, 400)
+    }
 
     const sendTypes = resolveSendTypes(deployment, requestedTypes)
     if (!sendTypes.length) {
@@ -124,6 +132,7 @@ Deno.serve(async (req) => {
         const r = await sendEmail({
           to: vol.email,
           subject: `Share your Afrivate volunteer experience — ${org?.name ?? ''}`.trim(),
+          category: 'survey-volunteer',
           ...volunteerEmail({
             volunteerName: vol.full_name,
             orgName: org?.name ?? 'the organisation',
@@ -149,6 +158,7 @@ Deno.serve(async (req) => {
         const r = await sendEmail({
           to: org.contact_email,
           subject: `Feedback request: ${vol?.full_name ?? 'your volunteer'} | Afrivate`,
+          category: 'survey-org',
           ...orgEmail({
             supervisorName: org.contact_name ?? 'there',
             volunteerName: vol?.full_name ?? 'the volunteer',
@@ -172,15 +182,12 @@ Deno.serve(async (req) => {
   }
 })
 
-// Returns the set of survey types ('volunteer' | 'org') that are PUBLISHED, or
-// null when the surveys table is missing/unseeded (so callers don't block).
+// Returns published survey types, null when surveys table is missing/unseeded (legacy allow).
 async function getPublishedTypes(admin: ReturnType<typeof createClient>) {
   const { data, error } = await admin.from('surveys').select('key, status')
   if (error || !data || data.length === 0) return null
   const set = new Set<string>()
   for (const row of data) if (row.status === 'PUBLISHED') set.add(row.key)
-  // If the table exists but nothing is published, don't block deployment emails.
-  if (set.size === 0) return null
   return set
 }
 
@@ -215,7 +222,8 @@ async function ensureTokens(
       const { error } = await admin
         .from('survey_tokens')
         .insert({ deployment_id: deploymentId, type, token, expires_at: expiresAt })
-      if (!error) map[type] = token
+      if (error) throw new Error(`Could not create survey link for ${type}: ${error.message}`)
+      map[type] = token
     } else {
       await admin
         .from('survey_tokens')
@@ -227,9 +235,9 @@ async function ensureTokens(
   return map
 }
 
-async function sendEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text?: string }) {
+async function sendEmail({ to, subject, html, text, category }: { to: string; subject: string; html: string; text?: string; category: string }) {
   try {
-    if (!smtpUser || !smtpPass) {
+    if (!isSmtpConfigured()) {
       return {
         ok: false,
         status: 0,
@@ -240,28 +248,18 @@ async function sendEmail({ to, subject, html, text }: { to: string; subject: str
       }
     }
 
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465,
-      auth: { user: smtpUser, pass: smtpPass },
-    })
-
-    const info = await transporter.sendMail({
-      from: fromName ? `"${fromName}" <${fromEmail}>` : fromEmail,
+    const info = await sendTransactionalMail({
+      fromName,
+      fromEmail,
       to,
       subject,
-      text,
       html,
+      text: text ?? '',
       replyTo: fromEmail,
-      headers: {
-        'Precedence': 'bulk',
-        'X-Auto-Response-Suppress': 'OOF, AutoReply',
-        'Auto-Submitted': 'auto-generated',
-      },
+      category,
     })
 
-    return { ok: true, status: 200, id: info.messageId }
+    return { ok: true, status: 200, id: 'sent' }
   } catch (err) {
     return { ok: false, status: 0, error: { message: String((err as Error)?.message ?? err) } }
   }

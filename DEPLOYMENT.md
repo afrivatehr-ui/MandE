@@ -27,10 +27,12 @@ app/                         React frontend (this is what gets hosted)
 supabase/
   migrations/                SQL: schema, RLS policies, VPI trigger
   seed.sql                   sample admin user + demo data
-  functions/                 3 Edge Functions (server-side logic)
+  functions/                 5 Edge Functions (server-side logic)
     surveys/                 public, token-validated survey GET/submit
     send-survey-emails/      sends survey invitations via Gmail SMTP
-    admin-users/             ADMIN-only user create/delete
+    admin-users/             ADMIN-only user create/delete/invite
+    request-access/          public signup queue + admin email alerts
+    send-auth-email/         optional branded auth emails hook
 ```
 
 **Roles:** ADMIN (full access + user mgmt), HR (read all + manage data),
@@ -92,7 +94,10 @@ of each file below and click **Run**, one at a time, **in this exact order**:
 9. `supabase/migrations/20260608000009_vpi_recalc_archive.sql` (archive + VPI fix)
 10. `supabase/migrations/20260609000010_access_roles_contact.sql` (access request + roles)
 11. `supabase/migrations/20260610000011_audit_fixes.sql` (security + app settings)
-12. `supabase/seed.sql`  (optional sample data + the admin login)
+12. `supabase/migrations/20260610000012_audit_followup.sql` (restrict publish RPC to staff)
+13. `supabase/migrations/20260611000013_audit_followup2.sql` (survey insert triggers + access RLS)
+14. `supabase/migrations/20260612000014_audit_followup3.sql` (token read + archived guards)
+15. `supabase/seed.sql`  (optional sample data + the admin login)
 
 Each run should report success. After file 4, you'll have a login:
 - **Email:** `admin@afrivate.com`
@@ -214,6 +219,69 @@ Supabase Dashboard → **Edge Functions → Secrets** → add:
 Remove any old `PLUNK_API_KEY` or `PLUNK_API_URL` secrets if present.
 
 Then redeploy the email function (Dashboard → Edge Functions → `send-survey-emails` → paste updated code → Deploy, or use CLI).
+
+### 8c. Branded auth emails + password-changed notifications
+
+All Supabase Auth emails (sign-up confirm, password reset, magic link, **password changed**, etc.) use your Gmail branding via the `send-auth-email` Edge Function.
+
+#### Step-by-step: Send Email hook + secret
+
+1. **Deploy the function** (if not already):
+   ```bash
+   npx supabase functions deploy send-auth-email --no-verify-jwt --project-ref djwcndqdxwsnycnclbcf
+   ```
+
+2. **Create the hook in Supabase Dashboard**
+   - Open [Authentication → Hooks](https://supabase.com/dashboard/project/djwcndqdxwsnycnclbcf/auth/hooks)
+   - Under **Send Email**, click **Add hook** (or **Configure** if one exists)
+   - **Hook type:** HTTPS
+   - **URL:** `https://djwcndqdxwsnycnclbcf.supabase.co/functions/v1/send-auth-email`
+   - Click **Generate secret** — Supabase shows a value like `v1,whsec_abc123...`
+   - **Copy the entire secret string** (including the `v1,whsec_` prefix)
+   - Click **Save** / **Create hook**
+
+3. **Paste the secret into Edge Function secrets**
+   - Open [Edge Functions → Secrets](https://supabase.com/dashboard/project/djwcndqdxwsnycnclbcf/settings/functions)
+   - Add or edit **`SEND_EMAIL_HOOK_SECRET`**
+   - Paste the **full** copied value (`v1,whsec_...`) — the function strips the prefix automatically
+   - Ensure these secrets also exist: `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `APP_URL`, optional `LOGO_URL`
+   - Save secrets (no redeploy needed for secret-only changes, but redeploy if you updated function code)
+
+4. **Enable security notifications**
+   - [Authentication → Email Templates](https://supabase.com/dashboard/project/djwcndqdxwsnycnclbcf/auth/templates)
+   - Enable **Password changed** (and optionally Email changed, etc.)
+   - With the hook active, `send-auth-email` sends branded HTML instead of Supabase defaults
+
+5. **Verify the hook works**
+   - Dashboard → Authentication → Hooks → Send Email → use **Send test email** if available, OR
+   - Use **Forgot password** on the live app → reset password → confirm you receive the branded **password changed** email
+
+**If auth emails fail:** check Edge Function logs for `send-auth-email`. Common causes: missing `SEND_EMAIL_HOOK_SECRET`, secret mismatch (regenerate hook secret and update both places), or SMTP not configured.
+
+### 8d. Email deliverability (avoid spam folder)
+
+Survey invitations and auth emails are sent via **Gmail SMTP** (`afrivatehr@gmail.com`). Gmail can deliver reliably, but **personal Gmail accounts** often land in spam for external recipients — especially on first send.
+
+**Immediate improvements (already in code):**
+- Branded HTML + plain-text alternative on every email
+- Removed `Precedence: bulk` / `Auto-Submitted` headers that trigger spam filters
+- Consistent `From`, `Reply-To`, and `Message-ID` headers
+- Transactional subject lines (no ALL CAPS, no “FREE”, etc.)
+
+**Strongly recommended for production:**
+
+1. **Use Google Workspace with your own domain** (e.g. `noreply@afrivate.com` or `mande@afrivate.com`) instead of `@gmail.com`. Update `SMTP_USER` and `EMAIL_FROM` to match.
+2. **Add DNS records** for that domain (in your domain registrar / Cloudflare):
+   - **SPF:** `v=spf1 include:_spf.google.com ~all`
+   - **DKIM:** enable in Google Admin → Apps → Google Workspace → Gmail → Authenticate email
+   - **DMARC:** start with `v=DMARC1; p=none; rua=mailto:afrivatehr@gmail.com` then tighten to `p=quarantine` once stable
+3. **Align link domain with sender:** set `APP_URL` to your production Netlify/custom domain so links in emails match a reputable domain (not `localhost` or unrelated URLs).
+4. **Logo URL:** set `LOGO_URL` to a **public HTTPS** image on your deployed site (e.g. `https://your-site.netlify.app/logos/afrivate-full-logo-purple.png`) — broken images hurt trust scores.
+5. **Warm up sending:** avoid blasting hundreds of emails on day one; start with test deployments to known inboxes.
+6. **Ask first recipients** to mark Afrivate emails as **Not spam** and add `afrivatehr@gmail.com` (or your Workspace address) to contacts — this trains Gmail/Outlook filters for your organisation.
+7. **Optional upgrade:** transactional providers (Resend, SendGrid, Amazon SES) with a verified domain typically outperform personal Gmail SMTP at scale. The edge functions can be switched to their APIs later while keeping the same templates.
+
+**Test deliverability:** send a deployment survey to your own Gmail and Outlook inboxes; check spam, Promotions, and inbox tabs.
 
 ---
 

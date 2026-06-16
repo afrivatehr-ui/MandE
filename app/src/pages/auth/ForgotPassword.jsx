@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import AuthCard from '../../components/auth/AuthCard'
+import { FullPageSpinner } from '../../components/Spinner'
 import Spinner from '../../components/Spinner'
 
 export default function ForgotPassword() {
-  const { resetPasswordForEmail } = useAuthStore()
+  const { resetPasswordForEmail, bootstrapped } = useAuthStore()
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -24,6 +25,8 @@ export default function ForgotPassword() {
       setSubmitting(false)
     }
   }
+
+  if (!bootstrapped) return <FullPageSpinner label="Loading" />
 
   if (sent) {
     return (

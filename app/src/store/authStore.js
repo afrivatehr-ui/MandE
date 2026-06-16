@@ -59,15 +59,28 @@ export const useAuthStore = create((set, get) => ({
       set({ profile: profile ?? null, loading: false, bootstrapped: true })
     } catch (err) {
       console.error('Profile fetch failed:', err)
-      if (sameUser && get().profile) {
-        set({ loading: false, bootstrapped: true })
-      } else {
-        set({ profile: null, loading: false, bootstrapped: true })
-      }
+      set({ profile: sameUser ? get().profile : null, loading: false, bootstrapped: true })
     }
 
     if (isBootstrap && get().bootstrapped !== true) {
       set({ bootstrapped: true, loading: false })
+    }
+  },
+
+  /** Refetch profile (e.g. after admin changes role while user is logged in). */
+  async refreshProfile() {
+    const session = get().session
+    if (!session?.user) return
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, email, name, role')
+        .eq('id', session.user.id)
+        .single()
+      if (error) throw error
+      set({ profile: profile ?? null })
+    } catch (err) {
+      console.warn('Profile refresh failed:', err)
     }
   },
 
@@ -81,6 +94,7 @@ export const useAuthStore = create((set, get) => ({
   async signOut() {
     await supabase.auth.signOut()
     set({ session: null, user: null, profile: null, loading: false, bootstrapped: true })
+    window.dispatchEvent(new Event('afri-clear-cache'))
   },
 
   async resetPasswordForEmail(email) {

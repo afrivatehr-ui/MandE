@@ -24,8 +24,8 @@ export default function Surveys() {
   const [confirmDelete, setConfirmDelete] = useState(null)
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['surveys'],
-    queryFn: fetchSurveys,
+    queryKey: ['surveys', canWrite],
+    queryFn: () => fetchSurveys({ publishDue: canWrite }),
   })
 
   const statusMutation = useMutation({

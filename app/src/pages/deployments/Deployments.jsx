@@ -36,11 +36,17 @@ const SURVEY_TARGETS = [
 
 const FILTERS = [
   { id: 'ALL', label: 'All' },
-  { id: 'ACTIVE', label: 'Active' },
+  { id: 'IN_PROGRESS', label: 'In progress' },
   { id: 'AWAITING_SURVEYS', label: 'Awaiting surveys' },
   { id: 'SURVEYS_COMPLETE', label: 'Surveys complete' },
   { id: 'COMPLETED', label: 'Completed' },
 ]
+
+function matchesFilter(d, filter) {
+  if (filter === 'ALL') return true
+  if (filter === 'IN_PROGRESS') return d.status !== 'COMPLETED'
+  return d.status === filter
+}
 
 function typeLabel(t) {
   return t === 'org' ? 'Organisation' : 'Volunteer'
@@ -77,7 +83,7 @@ export default function Deployments() {
 
   const rows = useMemo(() => {
     if (!deployments) return []
-    return filter === 'ALL' ? deployments : deployments.filter((d) => d.status === filter)
+    return filter === 'ALL' ? deployments : deployments.filter((d) => matchesFilter(d, filter))
   }, [deployments, filter])
 
   const resendMutation = useMutation({
@@ -155,6 +161,8 @@ export default function Deployments() {
         <SurveyStatus
           volDone={r.volSubmitted}
           orgDone={r.orgSubmitted}
+          volLinkUsed={r.volLinkUsed}
+          orgLinkUsed={r.orgLinkUsed}
           volNa={!r.needsVolunteerSurvey}
           orgNa={!r.needsOrganisationSurvey}
         />
@@ -398,7 +406,7 @@ function CreateDeploymentModal({ onClose }) {
       : 'Create & email organisation'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-afri-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-afri-black/40 p-4" onClick={() => { if (!createMutation.isPending) onClose() }}>
       <div className="afri-card my-8 w-full max-w-2xl p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
         <h2 className="mb-5 font-heading text-h2 text-afri-purple">New deployment</h2>
 

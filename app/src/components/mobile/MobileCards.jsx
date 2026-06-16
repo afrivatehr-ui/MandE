@@ -49,6 +49,8 @@ export function VolunteerMobileList({ rows, onSelect }) {
               <SurveyStatus
                 volDone={r.volSubmitted}
                 orgDone={r.orgSubmitted}
+                volLinkUsed={r.volLinkUsed}
+                orgLinkUsed={r.orgLinkUsed}
                 volNa={!r.needsVolunteerSurvey}
                 orgNa={!r.needsOrganisationSurvey}
               />
@@ -183,6 +185,8 @@ export function DeploymentMobileList({
             <SurveyStatus
               volDone={r.volSubmitted}
               orgDone={r.orgSubmitted}
+              volLinkUsed={r.volLinkUsed}
+              orgLinkUsed={r.orgLinkUsed}
               volNa={!r.needsVolunteerSurvey}
               orgNa={!r.needsOrganisationSurvey}
             />

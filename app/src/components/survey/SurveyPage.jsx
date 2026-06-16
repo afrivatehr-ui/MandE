@@ -63,7 +63,7 @@ export default function SurveyPage() {
 
 function SurveyShell({ children }) {
   return (
-    <div className="flex min-h-screen flex-col bg-afri-lavender/50 dark:bg-afri-purple-deep">
+    <div className="flex min-h-screen flex-col bg-afri-lavender/50">
       <header className="bg-afri-purple px-5 py-4 sm:px-8">
         <Logo variant="white" className="h-8" />
       </header>
@@ -112,7 +112,7 @@ function Confirmation({ context, type, answers }) {
         <h1 className="font-heading text-h2 text-afri-purple">Thank you{name ? `, ${name}` : ''}.</h1>
         <p className="afri-muted mt-2 font-body">Your response has been recorded.</p>
 
-        <dl className="mt-6 divide-y divide-afri-lavender rounded-lg bg-afri-lavender/40 px-4 text-left dark:divide-afri-purple-light/20 dark:bg-afri-purple-surface/60">
+        <dl className="mt-6 divide-y divide-afri-lavender rounded-lg bg-afri-lavender/40 px-4 text-left">
           {recap.map(([label, value]) => (
             <div key={label} className="flex items-center justify-between gap-4 py-3">
               <dt className="afri-muted font-body text-sm">{label}</dt>

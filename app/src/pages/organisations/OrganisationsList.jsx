@@ -7,13 +7,13 @@ import VPIBadge from '../../components/VPIBadge'
 import EmptyState from '../../components/EmptyState'
 import Spinner from '../../components/Spinner'
 import { ErrorNote } from '../dashboard/Dashboard'
-import { useAllDeployments } from '../../hooks/useData'
+import { useDeployments } from '../../hooks/useData'
 import { orgRanking } from '../../utils/analytics'
 import { formatVpi } from '../../utils/format'
 
 export default function OrganisationsList() {
   const navigate = useNavigate()
-  const { data: deployments, isLoading, error } = useAllDeployments()
+  const { data: deployments, isLoading, error } = useDeployments()
 
   const rows = useMemo(() => {
     if (!deployments) return []

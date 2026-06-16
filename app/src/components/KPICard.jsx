@@ -22,7 +22,7 @@ export default function KPICard({ label, value, sub, tone = 'default', icon, onC
         {icon && <span className={onPurple ? 'text-afri-white/70' : 'text-afri-purple/60'}>{icon}</span>}
       </div>
       <p
-        className={`font-heading text-3xl font-bold ${onPurple ? 'text-afri-white' : tone === 'alert' ? 'text-afri-red' : 'text-afri-purple dark:text-afri-lavender'
+        className={`font-heading text-3xl font-bold ${onPurple ? 'text-afri-white' : tone === 'alert' ? 'text-afri-red' : 'text-afri-purple'
           }`}
       >
         {value}

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore, isWriter } from '../../store/authStore'
 import {
   ResponsiveContainer,
   BarChart,
@@ -32,6 +33,7 @@ import { formatVpi, formatDateTime } from '../../utils/format'
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const canWrite = isWriter(useAuthStore((s) => s.profile?.role))
   const { data: deployments, isLoading, error } = useDeployments()
 
   const derived = useMemo(() => {
@@ -64,23 +66,29 @@ export default function Dashboard() {
       {!hasData ? (
         <EmptyState
           title="No deployments yet"
-          description="Create your first deployment to start collecting feedback and generating performance scores."
+          description={
+            canWrite
+              ? 'Create your first deployment to start collecting feedback and generating performance scores.'
+              : 'Deployments will appear here once your team starts tracking volunteer programmes.'
+          }
           cta={
-            <button onClick={() => navigate('/deployments')} className="afri-btn-primary">
-              Go to deployments
-            </button>
+            canWrite ? (
+              <button onClick={() => navigate('/deployments')} className="afri-btn-primary">
+                Go to deployments
+              </button>
+            ) : null
           }
         />
       ) : (
         <div className="flex flex-col gap-6">
           {/* KPI row */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
-            <KPICard label="Total Volunteers" value={summary.totalVolunteers} sub="this cycle" tone="purple" onClick={() => navigate('/volunteers')} />
+            <KPICard label="Scored volunteers" value={summary.totalVolunteers} sub="with VPI" tone="purple" onClick={() => navigate('/volunteers')} />
             <KPICard label="Average VPI" value={summary.avgVpi == null ? '—' : formatVpi(summary.avgVpi)} sub="scored deployments" tone="purple" />
             <KPICard label="A-Players" value={summary.a} sub="≥ 80%" onClick={() => navigate('/deployments')} />
             <KPICard label="B-Players" value={summary.b} sub="60–79%" onClick={() => navigate('/deployments')} />
             <KPICard label="C-Players" value={summary.c} sub="< 60%" tone={summary.c > 0 ? 'alert' : 'default'} onClick={() => navigate('/deployments')} />
-            <KPICard label="Partner Orgs" value={summary.activeOrgs} sub="active" onClick={() => navigate('/organisations')} />
+            <KPICard label="Scored partners" value={summary.activeOrgs} sub="organisations" onClick={() => navigate('/organisations')} />
           </div>
 
           {/* Charts row */}
@@ -128,7 +136,7 @@ export default function Dashboard() {
             <div className="afri-card p-5">
               <h2 className="mb-4 font-heading text-h3 text-afri-purple">Action Flags — Needs Intervention</h2>
               {flags.length ? (
-                <ul className="flex flex-col divide-y divide-afri-lavender dark:divide-afri-purple-light/20">
+                <ul className="flex flex-col divide-y divide-afri-lavender">
                   {flags.map((d) => (
                     <li key={d.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                       <div className="min-w-0">
@@ -154,7 +162,7 @@ export default function Dashboard() {
             <div className="afri-card p-5">
               <h2 className="mb-4 font-heading text-h3 text-afri-purple">Recent Submissions</h2>
               {recent.length ? (
-                <ul className="flex flex-col divide-y divide-afri-lavender dark:divide-afri-purple-light/20">
+                <ul className="flex flex-col divide-y divide-afri-lavender">
                   {recent.map((r) => (
                     <li key={r.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                       <div className="min-w-0">

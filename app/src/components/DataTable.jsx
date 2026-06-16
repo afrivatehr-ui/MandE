@@ -70,7 +70,7 @@ export default function DataTable({
               )
             })}
             {mobileColumns.length > 0 && (
-              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-afri-lavender/60 pt-3 dark:border-afri-purple-light/20">
+              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-afri-lavender/60 pt-3">
                 {mobileColumns.map((col) => (
                   <div key={col.key} className={col.key === 'actions' ? 'col-span-2' : ''}>
                     {col.header ? (
@@ -82,7 +82,7 @@ export default function DataTable({
               </dl>
             )}
             {columns.find((c) => c.key === 'actions') && (
-              <div className="mt-3 border-t border-afri-lavender/60 pt-3 dark:border-afri-purple-light/20">
+              <div className="mt-3 border-t border-afri-lavender/60 pt-3">
                 {cellValue(columns.find((c) => c.key === 'actions'), row)}
               </div>
             )}
@@ -91,14 +91,14 @@ export default function DataTable({
       </div>
 
       {/* Desktop table */}
-      <div className="hidden overflow-x-auto rounded-card border border-afri-lavender bg-afri-white md:block dark:border-afri-purple-light/25 dark:bg-afri-purple-elevated">
+      <div className="hidden overflow-x-auto rounded-card border border-afri-lavender bg-afri-white md:block">
         <table className="w-full min-w-[640px] border-collapse text-left">
           <thead>
-            <tr className="border-b border-afri-lavender bg-afri-lavender/40 dark:border-afri-purple-light/20 dark:bg-afri-purple-surface/80">
+            <tr className="border-b border-afri-lavender bg-afri-lavender/40">
               {desktopColumns.map((col) => (
                 <th
                   key={col.key}
-                  className={`whitespace-nowrap px-4 py-3 font-heading text-xs font-semibold uppercase tracking-wide text-afri-purple dark:text-afri-lavender ${
+                  className={`whitespace-nowrap px-4 py-3 font-heading text-xs font-semibold uppercase tracking-wide text-afri-purple ${
                     col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''
                   }`}
                 >
@@ -106,7 +106,7 @@ export default function DataTable({
                     <button
                       type="button"
                       onClick={() => toggleSort(col.key)}
-                      className="inline-flex items-center gap-1 hover:text-afri-purple/70 dark:hover:text-afri-white"
+                      className="inline-flex items-center gap-1 hover:text-afri-purple/70"
                     >
                       {col.header}
                       <span className="text-[9px]">
@@ -125,14 +125,14 @@ export default function DataTable({
               <tr
                 key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={`border-b border-afri-lavender/60 last:border-0 dark:border-afri-purple-light/15 ${
-                  onRowClick ? 'cursor-pointer hover:bg-afri-lavender/30 dark:hover:bg-afri-purple-light/10' : ''
+                className={`border-b border-afri-lavender/60 last:border-0 ${
+                  onRowClick ? 'cursor-pointer hover:bg-afri-lavender/30' : ''
                 }`}
               >
                 {desktopColumns.map((col) => (
                   <td
                     key={col.key}
-                    className={`px-4 py-3 font-body text-sm text-afri-black dark:text-afri-white/90 ${
+                    className={`px-4 py-3 font-body text-sm text-afri-black ${
                       col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''
                     } ${col.key === 'actions' ? 'min-w-[14rem]' : ''}`}
                   >

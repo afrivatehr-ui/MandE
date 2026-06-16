@@ -72,7 +72,7 @@ export default function VolunteerDetail() {
           </button>
         )}
         {isArchived && (
-          <span className="afri-subtle rounded-full bg-afri-black/5 px-3 py-1 text-xs dark:bg-afri-white/10">Archived — data kept for reports</span>
+          <span className="afri-subtle rounded-full bg-afri-black/5 px-3 py-1 text-xs">Archived — data kept for reports</span>
         )}
       </div>
 
@@ -179,7 +179,7 @@ function DimCard({ label, value, max = 5 }) {
 function Expandable({ title, children, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-lg border border-afri-lavender dark:border-afri-purple-light/25">
+    <div className="rounded-lg border border-afri-lavender">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -188,7 +188,7 @@ function Expandable({ title, children, defaultOpen }) {
         {title}
         <span className="afri-subtle">{open ? '−' : '+'}</span>
       </button>
-      {open && <div className="border-t border-afri-lavender px-4 py-4 dark:border-afri-purple-light/25">{children}</div>}
+      {open && <div className="border-t border-afri-lavender px-4 py-4">{children}</div>}
     </div>
   )
 }

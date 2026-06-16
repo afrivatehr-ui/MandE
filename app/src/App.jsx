@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from './store/authStore'
 import { useSettingsStore } from './store/settingsStore'
 import { fetchAppSettings } from './api/admin'
@@ -31,8 +32,10 @@ import NotFound from './pages/NotFound'
 
 
 export default function App() {
+  const queryClient = useQueryClient()
   const init = useAuthStore((s) => s.init)
   const session = useAuthStore((s) => s.session)
+  const refreshProfile = useAuthStore((s) => s.refreshProfile)
   const setSurveyTokenExpiryDays = useSettingsStore((s) => s.setSurveyTokenExpiryDays)
 
   useEffect(() => {
@@ -43,8 +46,25 @@ export default function App() {
     if (!session) return
     fetchAppSettings()
       .then((s) => setSurveyTokenExpiryDays(s.survey_token_expiry_days))
-      .catch(() => {})
+      .catch((err) => console.warn('Could not load organisation settings:', err))
   }, [session, setSurveyTokenExpiryDays])
+
+  useEffect(() => {
+    if (!session) return undefined
+    const onFocus = () => refreshProfile()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [session, refreshProfile])
+
+  useEffect(() => {
+    const clear = () => queryClient.clear()
+    window.addEventListener('afri-clear-cache', clear)
+    return () => window.removeEventListener('afri-clear-cache', clear)
+  }, [queryClient])
+
+  useEffect(() => {
+    if (!session) queryClient.clear()
+  }, [session, queryClient])
 
   if (!isSupabaseConfigured) {
     return <ConfigError />
@@ -78,14 +98,7 @@ export default function App() {
           <Route path="/organisations/:id" element={<OrganisationDetail />} />
           <Route path="/deployments" element={<Deployments />} />
           <Route path="/reports" element={<Reports />} />
-          <Route
-            path="/surveys"
-            element={
-              <ProtectedRoute writerOnly>
-                <Surveys />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/surveys" element={<Surveys />} />
           <Route path="/survey-test" element={<Navigate to="/surveys" replace />} />
 
           <Route

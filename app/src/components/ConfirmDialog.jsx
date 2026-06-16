@@ -1,5 +1,6 @@
 /**
  * Controlled confirmation modal. Render conditionally on `open`.
+ * Destructive dialogs do not close when clicking the backdrop.
  */
 export default function ConfirmDialog({
   open,
@@ -13,8 +14,17 @@ export default function ConfirmDialog({
   busy = false,
 }) {
   if (!open) return null
+
+  function handleBackdropClick() {
+    if (busy) return
+    if (tone !== 'danger') onCancel()
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-afri-black/40 p-4" onClick={onCancel}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-afri-black/40 p-4"
+      onClick={handleBackdropClick}
+    >
       <div
         className="afri-card w-full max-w-md p-6"
         onClick={(e) => e.stopPropagation()}

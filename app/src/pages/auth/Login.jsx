@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import AuthCard from '../../components/auth/AuthCard'
 import PasswordInput from '../../components/PasswordInput'
+import Spinner, { FullPageSpinner } from '../../components/Spinner'
 import { safePath } from '../../utils/mapApiError'
 
 export default function Login() {
@@ -19,7 +20,8 @@ export default function Login() {
   const from = safePath(location.state?.from)
   const idleLogout = location.state?.reason === 'idle'
 
-  if (bootstrapped && session) return <Navigate to={from} replace />
+  if (!bootstrapped) return <FullPageSpinner label="Loading" />
+  if (session) return <Navigate to={from} replace />
 
   async function handlePasswordSubmit(e) {
     e.preventDefault()
@@ -79,7 +81,7 @@ export default function Login() {
           type="button"
           onClick={() => { setMode('password'); setError('') }}
           className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-            mode === 'password' ? 'bg-afri-white text-afri-purple shadow-sm dark:bg-afri-purple-elevated dark:text-afri-lavender' : 'afri-muted'
+            mode === 'password' ? 'bg-afri-white text-afri-purple shadow-sm' : 'afri-muted'
           }`}
         >
           Password
@@ -88,7 +90,7 @@ export default function Login() {
           type="button"
           onClick={() => { setMode('magic'); setError('') }}
           className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-            mode === 'magic' ? 'bg-afri-white text-afri-purple shadow-sm dark:bg-afri-purple-elevated dark:text-afri-lavender' : 'afri-muted'
+            mode === 'magic' ? 'bg-afri-white text-afri-purple shadow-sm' : 'afri-muted'
           }`}
         >
           Email link

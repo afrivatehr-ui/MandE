@@ -10,11 +10,13 @@ import SurveyStatus from '../../components/SurveyStatus'
 import EmptyState from '../../components/EmptyState'
 import Spinner from '../../components/Spinner'
 import { ErrorNote } from '../dashboard/Dashboard'
+import { useAuthStore, isWriter } from '../../store/authStore'
 import { useDeployments, useOrganisations } from '../../hooks/useData'
 import { formatDateRange, formatVpi } from '../../utils/format'
 
 export default function VolunteersList() {
   const navigate = useNavigate()
+  const canWrite = isWriter(useAuthStore((s) => s.profile?.role))
   const { data: deployments, isLoading, error } = useDeployments()
   const { data: organisations } = useOrganisations()
   const [search, setSearch] = useState('')
@@ -90,6 +92,8 @@ export default function VolunteersList() {
         <SurveyStatus
           volDone={r.volSubmitted}
           orgDone={r.orgSubmitted}
+          volLinkUsed={r.volLinkUsed}
+          orgLinkUsed={r.orgLinkUsed}
           volNa={!r.needsVolunteerSurvey}
           orgNa={!r.needsOrganisationSurvey}
         />
@@ -158,7 +162,11 @@ export default function VolunteersList() {
       {!rows.length ? (
         <EmptyState
           title="No volunteers match"
-          description="Try adjusting your filters, or create a deployment to start tracking volunteers."
+          description={
+            canWrite
+              ? 'Try adjusting your filters, or create a deployment to start tracking volunteers.'
+              : 'Try adjusting your filters. Volunteers appear here once deployments are recorded.'
+          }
         />
       ) : (
         <>

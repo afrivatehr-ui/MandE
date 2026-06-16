@@ -17,7 +17,7 @@ MandE/
 ├── supabase/
 │   ├── migrations/         SQL schema, RLS, VPI triggers
 │   ├── seed.sql            Demo data
-│   └── functions/          surveys, send-survey-emails, admin-users
+│   └── functions/          surveys, send-survey-emails, admin-users, request-access
 ├── netlify.toml
 ├── README.md
 ├── DEPLOYMENT.md
@@ -54,7 +54,13 @@ dashboard -> **SQL Editor** and run each file's contents in this order:
 6. `supabase/migrations/20260603000006_access_requests.sql`
 7. `supabase/migrations/20260607000007_deployment_survey_targets.sql`
 8. `supabase/migrations/20260607000008_deployment_both_parties.sql`
-9. `supabase/seed.sql`  (optional sample data; creates the admin login below)
+9. `supabase/migrations/20260608000009_vpi_recalc_archive.sql`
+10. `supabase/migrations/20260609000010_access_roles_contact.sql`
+11. `supabase/migrations/20260610000011_audit_fixes.sql`
+12. `supabase/migrations/20260610000012_audit_followup.sql`
+13. `supabase/migrations/20260611000013_audit_followup2.sql`
+14. `supabase/migrations/20260612000014_audit_followup3.sql`
+15. `supabase/seed.sql`  (optional sample data; creates the admin login below)
 
 Or, with the [Supabase CLI](https://supabase.com/docs/guides/cli):
 
@@ -76,10 +82,14 @@ supabase secrets set SMTP_USER="afrivatehr@gmail.com"
 supabase secrets set SMTP_PASS="your-16-char-gmail-app-password"
 supabase secrets set EMAIL_FROM="Afrivate M&E <afrivatehr@gmail.com>"
 supabase secrets set APP_URL="https://your-app-domain"   # used in survey links
+supabase secrets set ADMIN_NOTIFY_EMAILS="admin@example.com"   # optional extra admin inboxes
+supabase secrets set SEND_EMAIL_HOOK_SECRET="your-hook-secret"   # auth email hook (see DEPLOYMENT.md)
 
-supabase functions deploy surveys
+supabase functions deploy surveys --no-verify-jwt
 supabase functions deploy send-survey-emails
 supabase functions deploy admin-users
+supabase functions deploy request-access --no-verify-jwt
+supabase functions deploy send-auth-email --no-verify-jwt
 ```
 
 Or set the same secrets in Supabase Dashboard → **Edge Functions → Secrets**.
