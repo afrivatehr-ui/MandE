@@ -1,0 +1,9 @@
+# Edge Function settings — verify_jwt must be false for hooks called by GoTrue
+[functions.send-auth-email]
+verify_jwt = false
+
+[functions.surveys]
+verify_jwt = false
+
+[functions.request-access]
+verify_jwt = false

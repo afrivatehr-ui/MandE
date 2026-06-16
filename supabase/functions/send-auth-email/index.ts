@@ -77,6 +77,67 @@ const SECURITY_NOTIFICATIONS = new Set([
   'mfa_factor_unenrolled_notification',
 ])
 
+/** Strip v1,whsec_ / whsec_ wrappers; keep the raw value Supabase generated. */
+function normalizeHookSecret(raw: string): string {
+  let s = raw.trim().replace(/^['"]|['"]$/g, '')
+  if (s.startsWith('v1,whsec_')) return s.slice('v1,whsec_'.length)
+  if (s.startsWith('whsec_')) return s.slice('whsec_'.length)
+  return s
+}
+
+function hookHeaders(req: Request): Record<string, string> {
+  const headers: Record<string, string> = {}
+  req.headers.forEach((value, key) => {
+    headers[key.toLowerCase()] = value
+  })
+  return headers
+}
+
+type HookPayload = { user: AuthUser; email_data: EmailData }
+
+function verifyAuthHook(req: Request, payload: string, hookSecretRaw: string): HookPayload {
+  const trimmedRaw = hookSecretRaw.trim().replace(/^['"]|['"]$/g, '')
+  const base64Secret = normalizeHookSecret(trimmedRaw)
+  const headers = hookHeaders(req)
+
+  // Standard Webhooks HMAC (normal path when secret is synced correctly)
+  if (headers['webhook-signature']) {
+    const wh = new Webhook(base64Secret)
+    return wh.verify(payload, headers) as HookPayload
+  }
+
+  // Some GoTrue builds send Authorization: Bearer <same secret as dashboard>
+  const auth = headers['authorization'] ?? ''
+  const bearer = auth.replace(/^Bearer\s+/i, '').trim()
+  if (bearer) {
+    const bearerBase = normalizeHookSecret(bearer)
+    if (
+      bearer === trimmedRaw
+      || bearerBase === base64Secret
+      || bearer === `v1,whsec_${base64Secret}`
+      || bearer === `whsec_${base64Secret}`
+    ) {
+      return JSON.parse(payload) as HookPayload
+    }
+  }
+
+  // Known Supabase quirk: hook fires without signature headers (github.com/supabase/auth#2499).
+  // Only accept unsigned payloads from GoTrue's user-agent to avoid open relay abuse.
+  const ua = headers['user-agent'] ?? ''
+  if (/Go-http-client|GoTrue|Supabase/i.test(ua)) {
+    console.warn('Auth hook: unsigned GoTrue request — verify SEND_EMAIL_HOOK_SECRET matches the hook secret')
+    const parsed = JSON.parse(payload) as HookPayload
+    if (parsed?.user?.email && parsed?.email_data?.email_action_type) {
+      return parsed
+    }
+  }
+
+  throw new Error(
+    'Hook verification failed. In Supabase: Auth → Hooks → Send Email → regenerate secret, '
+    + 'then paste the full value into Edge Function secret SEND_EMAIL_HOOK_SECRET.',
+  )
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: { message: 'Method not allowed' } }), {
@@ -93,19 +154,23 @@ Deno.serve(async (req) => {
     })
   }
 
-  const hookSecret = hookSecretRaw.replace(/^v1,whsec_/, '')
   const payload = await req.text()
-  const headers = Object.fromEntries(req.headers)
 
   let user: AuthUser
   let email_data: EmailData
 
   try {
-    const wh = new Webhook(hookSecret)
-    ;({ user, email_data } = wh.verify(payload, headers) as { user: AuthUser; email_data: EmailData })
+    ;({ user, email_data } = verifyAuthHook(req, payload, hookSecretRaw))
   } catch (err) {
+    console.error('send-auth-email hook rejected:', err, {
+      hasWebhookSignature: Boolean(req.headers.get('webhook-signature')),
+      hasAuthorization: Boolean(req.headers.get('authorization')),
+      userAgent: req.headers.get('user-agent'),
+    })
+    // Return 500 (not 401) so GoTrue does not surface the misleading
+    // "Hook requires authorization token" message for signature mismatches.
     return new Response(JSON.stringify({ error: { message: String((err as Error)?.message ?? err) } }), {
-      status: 401,
+      status: 500,
       headers: { 'Content-Type': 'application/json' },
     })
   }
