@@ -4,7 +4,7 @@ import SurveyFlow from './SurveyFlow'
 import Logo from '../Logo'
 import { FullPageSpinner } from '../Spinner'
 import { getSurveyContext, submitSurvey } from '../../api/surveys'
-import { VOLUNTEER_SURVEY, ORG_SURVEY } from '../../config/surveyQuestions'
+import { getSurveyConfigForTrack } from '../../config/surveyQuestions'
 
 export default function SurveyPage() {
   const { token } = useParams()
@@ -51,7 +51,7 @@ export default function SurveyPage() {
     )
   }
 
-  const survey = context.type === 'org' ? ORG_SURVEY : VOLUNTEER_SURVEY
+  const survey = getSurveyConfigForTrack(context.type, context.mande_track ?? 'internal')
 
   async function handleSubmit(answers) {
     const result = await submitSurvey(token, answers)

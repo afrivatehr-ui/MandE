@@ -347,7 +347,7 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
   const { data: deployment } = await supabase
     .from('deployments')
     .select(
-      'id, role_title, org_contact_role, start_date, end_date, archived_at, volunteers ( volunteer_id, full_name, archived_at ), organisations ( name, archived_at )',
+      'id, role_title, org_contact_role, start_date, end_date, archived_at, mande_track, volunteers ( volunteer_id, full_name, archived_at ), organisations ( name, archived_at )',
     )
     .eq('id', tokenRow.deployment_id)
     .single()
@@ -374,10 +374,13 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
   // If the surveys table isn't present yet, default to accepting (fallback).
   let accepting = true
   let surveyStatus: string | null = null
+  const surveyKey = deployment.mande_track === 'external'
+    ? `${tokenRow.type}_external`
+    : tokenRow.type
   const { data: surveyRow, error: surveyErr } = await supabase
     .from('surveys')
     .select('status')
-    .eq('key', tokenRow.type)
+    .eq('key', surveyKey)
     .maybeSingle()
   if (!surveyErr && surveyRow) {
     surveyStatus = surveyRow.status
@@ -386,6 +389,7 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
 
   return {
     type: tokenRow.type as 'volunteer' | 'org',
+    mande_track: deployment.mande_track ?? 'internal',
     alreadySubmitted: Boolean(existingSurvey?.id) || tokenRow.used,
     accepting,
     surveyStatus,

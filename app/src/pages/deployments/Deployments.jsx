@@ -25,6 +25,7 @@ import {
   archiveDeployment,
   nextVolunteerCode,
 } from '../../api/data'
+import { MANDE_TRACK_LABELS } from '../../config/surveyQuestions'
 import { formatDateRange, formatVpi, STATUS_LABEL } from '../../utils/format'
 import { copyToClipboard } from '../../utils/mapApiError'
 
@@ -289,6 +290,8 @@ function CreateDeploymentModal({ onClose }) {
     org_contact_role: '',
     start_date: '',
     end_date: '',
+    hours_served: '',
+    mande_track: 'internal',
   })
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }))
@@ -353,6 +356,8 @@ function CreateDeploymentModal({ onClose }) {
         start_date: form.start_date,
         end_date: form.end_date,
         survey_target: surveyTarget,
+        mande_track: form.mande_track,
+        hours_served: form.hours_served ? Number(form.hours_served) : null,
       })
       await createSurveyTokens(deployment.id, form.end_date, expiryDays, surveyTypes)
       await updateDeploymentStatus(deployment.id, 'AWAITING_SURVEYS')
@@ -516,6 +521,17 @@ function CreateDeploymentModal({ onClose }) {
             <Input label="Organisation contact role" value={form.org_contact_role} onChange={(v) => set({ org_contact_role: v })} placeholder="e.g. Volunteer Programme Lead" />
             <Input label="Start date" type="date" value={form.start_date} onChange={(v) => set({ start_date: v })} />
             <Input label="End date" type="date" value={form.end_date} onChange={(v) => set({ end_date: v })} />
+            <Input label="Hours served (optional)" type="number" min={0} step={0.5} value={form.hours_served} onChange={(v) => set({ hours_served: v })} placeholder="For certificates / badges" />
+            <div>
+              <label className="afri-label">M&amp;E track</label>
+              <select className="afri-input w-full" value={form.mande_track} onChange={(e) => set({ mande_track: e.target.value })}>
+                <option value="internal">{MANDE_TRACK_LABELS.internal}</option>
+                <option value="external">{MANDE_TRACK_LABELS.external}</option>
+              </select>
+              <p className="mt-1 font-body text-xs text-afri-black/50">
+                Internal uses Afrivate evaluation surveys. External uses publication-ready questionnaires.
+              </p>
+            </div>
           </div>
           {form.start_date && form.end_date && form.end_date < form.start_date && (
             <p className="font-body text-sm text-afri-red">End date must be on or after the start date.</p>

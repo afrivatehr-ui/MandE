@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import { VOLUNTEER_SURVEY, ORG_SURVEY } from '../config/surveyQuestions'
+import { VOLUNTEER_SURVEY, ORG_SURVEY, getSurveyConfigForTrack } from '../config/surveyQuestions'
 import { mapApiError } from '../utils/mapApiError'
 
 function throwDb(error) {
@@ -18,7 +18,7 @@ function one(rel) {
 }
 
 const DEPLOYMENT_SELECT = `
-  id, role_title, org_contact_role, start_date, end_date, status, vpi_score, vpi_category, action_flag, survey_target, archived_at, created_at, updated_at,
+  id, role_title, org_contact_role, start_date, end_date, status, vpi_score, vpi_category, action_flag, survey_target, mande_track, hours_served, archived_at, created_at, updated_at,
   volunteer_id, organisation_id,
   volunteers ( id, volunteer_id, full_name, email, archived_at ),
   organisations ( id, name, sector, contact_name, contact_email, contact_title, archived_at ),
@@ -32,7 +32,7 @@ const DEPLOYMENT_SELECT = `
 
 // Fuller select for detail pages (complete survey answers for expandable views).
 const DEPLOYMENT_DETAIL_SELECT = `
-  id, role_title, org_contact_role, start_date, end_date, status, vpi_score, vpi_category, action_flag, created_at, updated_at,
+  id, role_title, org_contact_role, start_date, end_date, status, vpi_score, vpi_category, action_flag, mande_track, hours_served, created_at, updated_at,
   volunteer_id, organisation_id,
   volunteers ( id, volunteer_id, full_name, email, phone ),
   organisations ( id, name, sector, contact_name, contact_email, contact_title ),
@@ -168,12 +168,21 @@ export async function fetchOrganisations() {
 export async function fetchVolunteer(id) {
   const { data, error } = await supabase.from('volunteers').select('*').eq('id', id).single()
   if (error) throwDb(error)
-  const { data: deps, error: depErr } = await supabase
-    .from('deployments')
-    .select(DEPLOYMENT_DETAIL_SELECT)
-    .eq('volunteer_id', id)
-    .order('start_date', { ascending: false })
+  const [{ data: deps, error: depErr }, { data: engagements, error: engErr }, { data: hoursRow }] = await Promise.all([
+    supabase
+      .from('deployments')
+      .select(DEPLOYMENT_DETAIL_SELECT)
+      .eq('volunteer_id', id)
+      .order('start_date', { ascending: false }),
+    supabase
+      .from('volunteer_engagements')
+      .select('*')
+      .eq('volunteer_id', id)
+      .order('start_date', { ascending: false }),
+    supabase.rpc('volunteer_total_hours', { p_volunteer_id: id }),
+  ])
   if (depErr) throwDb(depErr)
+  if (engErr && engErr.code !== 'PGRST205' && engErr.code !== '42P01') throwDb(engErr)
   const ids = (deps ?? []).map((d) => d.id)
   const { volByDep, orgByDep } = await loadFullSurveyRowsByDeployment(ids)
   return {
@@ -181,7 +190,20 @@ export async function fetchVolunteer(id) {
     deployments: (deps ?? []).map((d) =>
       normaliseDeployment(d, volByDep.get(d.id), orgByDep.get(d.id)),
     ),
+    engagements: engagements ?? [],
+    totalHours: Number(hoursRow ?? 0),
   }
+}
+
+export async function createVolunteerEngagement(payload) {
+  const { data, error } = await supabase.from('volunteer_engagements').insert(payload).select().single()
+  if (error) throwDb(error)
+  return data
+}
+
+export async function deleteVolunteerEngagement(id) {
+  const { error } = await supabase.from('volunteer_engagements').delete().eq('id', id)
+  if (error) throwDb(error)
 }
 
 export async function fetchOrganisation(id) {
@@ -355,8 +377,10 @@ const EMPTY_DEFINITION = { type: 'custom', likertSections: [], overall: { title:
 // custom surveys use their stored `definition`.
 export function getSurveyConfig(survey) {
   if (!survey) return VOLUNTEER_SURVEY
-  if (survey.is_builtin || survey.key === 'volunteer' || survey.key === 'org') {
-    return survey.key === 'org' ? ORG_SURVEY : VOLUNTEER_SURVEY
+  if (survey.is_builtin || survey.key === 'volunteer' || survey.key === 'org' || String(survey.key).includes('external')) {
+    const track = survey.mande_track ?? (String(survey.key).includes('external') ? 'external' : 'internal')
+    const type = String(survey.key).startsWith('org') ? 'org' : 'volunteer'
+    return getSurveyConfigForTrack(type, track)
   }
   const def = survey.definition && Object.keys(survey.definition).length ? survey.definition : EMPTY_DEFINITION
   return { ...EMPTY_DEFINITION, ...def, overall: { ...EMPTY_DEFINITION.overall, ...(def.overall || {}) }, feedback: { ...EMPTY_DEFINITION.feedback, ...(def.feedback || {}) } }

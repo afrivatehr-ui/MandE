@@ -12,11 +12,12 @@ import { ErrorNote } from '../dashboard/Dashboard'
 import { mapApiError } from '../../utils/mapApiError'
 import { useVolunteer } from '../../hooks/useData'
 import { useAuthStore, isWriter } from '../../store/authStore'
-import { archiveVolunteer } from '../../api/data'
+import { archiveVolunteer, createVolunteerEngagement, deleteVolunteerEngagement } from '../../api/data'
 import { toast } from '../../store/toastStore'
 import { getActionDescription } from '../../utils/vpiEngine'
 import { initials, formatDateRange, formatVpi } from '../../utils/format'
-import { VOLUNTEER_SURVEY, ORG_SURVEY } from '../../config/surveyQuestions'
+import { getSurveyConfigForTrack, MANDE_TRACK_LABELS } from '../../config/surveyQuestions'
+import VolunteerHoursBadge from '../../components/VolunteerHoursBadge'
 
 export default function VolunteerDetail() {
   const { id } = useParams()
@@ -26,6 +27,7 @@ export default function VolunteerDetail() {
   const canWrite = isWriter(profile?.role)
   const { data, isLoading, error } = useVolunteer(id)
   const [confirmArchive, setConfirmArchive] = useState(false)
+  const [showAddEngagement, setShowAddEngagement] = useState(false)
 
   const archiveMutation = useMutation({
     mutationFn: () => archiveVolunteer(id),
@@ -56,7 +58,7 @@ export default function VolunteerDetail() {
     return <ErrorNote error={error} />
   }
 
-  const { volunteer, deployments } = data
+  const { volunteer, deployments, engagements = [], totalHours = 0 } = data
   const latest = deployments.find((d) => d.vpi != null) || deployments[0] || null
   const isArchived = Boolean(volunteer.archived_at)
 
@@ -95,7 +97,10 @@ export default function VolunteerDetail() {
             )}
           </div>
         </div>
-        <VPIRing score={latest?.vpi == null ? null : Number(latest.vpi)} category={latest?.category} />
+        <div className="flex flex-col items-center gap-3 sm:items-end">
+          <VolunteerHoursBadge hours={totalHours} />
+          <VPIRing score={latest?.vpi == null ? null : Number(latest.vpi)} category={latest?.category} />
+        </div>
       </div>
 
       {latest?.category && (
@@ -115,6 +120,63 @@ export default function VolunteerDetail() {
         </div>
       )}
 
+      {/* Past engagements (historical hours) */}
+      <div className="mb-6">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-heading text-h3 text-afri-purple">Past engagements</h2>
+          {canWrite && !isArchived && (
+            <button type="button" onClick={() => setShowAddEngagement((v) => !v)} className="afri-btn-secondary text-sm">
+              {showAddEngagement ? 'Cancel' : 'Add past engagement'}
+            </button>
+          )}
+        </div>
+        {showAddEngagement && (
+          <PastEngagementForm
+            volunteerId={volunteer.id}
+            onSaved={() => {
+              queryClient.invalidateQueries({ queryKey: ['volunteer', id] })
+              setShowAddEngagement(false)
+              toast.success('Past engagement recorded.')
+            }}
+          />
+        )}
+        {engagements.length ? (
+          <DataTable
+            rows={engagements}
+            rowKey={(r) => r.id}
+            columns={[
+              { key: 'organisation_name', header: 'Organisation' },
+              { key: 'role_title', header: 'Role', render: (r) => r.role_title || '—' },
+              { key: 'period', header: 'Period', render: (r) => <span className="text-xs">{formatDateRange(r.start_date, r.end_date)}</span> },
+              { key: 'hours_served', header: 'Hours', align: 'right', render: (r) => Number(r.hours_served).toLocaleString() },
+              { key: 'mande_track', header: 'Track', render: (r) => <span className="text-xs">{MANDE_TRACK_LABELS[r.mande_track] ?? r.mande_track}</span> },
+              ...(canWrite ? [{
+                key: 'actions',
+                header: '',
+                align: 'right',
+                render: (r) => (
+                  <button
+                    type="button"
+                    className="text-xs text-afri-red hover:underline"
+                    onClick={async () => {
+                      await deleteVolunteerEngagement(r.id)
+                      queryClient.invalidateQueries({ queryKey: ['volunteer', id] })
+                      toast.success('Engagement removed.')
+                    }}
+                  >
+                    Remove
+                  </button>
+                ),
+              }] : []),
+            ]}
+          />
+        ) : (
+          <p className="afri-muted rounded-lg border border-dashed border-afri-purple/20 px-4 py-6 text-center text-sm">
+            No past engagements recorded yet. Add historical placements to include their hours in certificates.
+          </p>
+        )}
+      </div>
+
       {/* Deployment history */}
       <div className="mb-6">
         <h2 className="mb-3 font-heading text-h3 text-afri-purple">Deployment history</h2>
@@ -125,6 +187,8 @@ export default function VolunteerDetail() {
             { key: 'orgName', header: 'Organisation' },
             { key: 'role_title', header: 'Role' },
             { key: 'period', header: 'Period', render: (r) => <span className="text-xs">{formatDateRange(r.start_date, r.end_date)}</span> },
+            { key: 'hours_served', header: 'Hours', align: 'right', render: (r) => (r.hours_served == null ? '—' : Number(r.hours_served).toLocaleString()) },
+            { key: 'mande_track', header: 'Track', render: (r) => <span className="text-xs">{MANDE_TRACK_LABELS[r.mande_track] ?? 'Internal'}</span> },
             { key: 'vpi', header: 'VPI', align: 'right', render: (r) => <span className="font-semibold text-afri-purple">{formatVpi(r.vpi)}</span> },
             { key: 'category', header: 'Category', align: 'center', render: (r) => <VPIBadge category={r.category} showLabel={false} /> },
           ]}
@@ -137,13 +201,16 @@ export default function VolunteerDetail() {
           <div key={d.id} className="afri-card p-5">
             <p className="mb-3 font-heading font-medium text-afri-purple">
               {d.orgName} · {formatDateRange(d.start_date, d.end_date)}
+              <span className="afri-muted ml-2 font-body text-xs font-normal">
+                ({MANDE_TRACK_LABELS[d.mande_track] ?? 'Internal'})
+              </span>
             </p>
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <Expandable title="Organisation survey" defaultOpen={false}>
-                <SurveyAnswers survey={d.orgSurvey} config={ORG_SURVEY} />
+                <SurveyAnswers survey={d.orgSurvey} config={getSurveyConfigForTrack('org', d.mande_track)} />
               </Expandable>
               <Expandable title="Volunteer self-report" defaultOpen={false}>
-                <SurveyAnswers survey={d.volSurvey} config={VOLUNTEER_SURVEY} />
+                <SurveyAnswers survey={d.volSurvey} config={getSurveyConfigForTrack('volunteer', d.mande_track)} />
               </Expandable>
             </div>
           </div>
@@ -161,6 +228,57 @@ export default function VolunteerDetail() {
         onConfirm={() => archiveMutation.mutate()}
       />
     </div>
+  )
+}
+
+function PastEngagementForm({ volunteerId, onSaved }) {
+  const [form, setForm] = useState({
+    organisation_name: '',
+    role_title: '',
+    start_date: '',
+    end_date: '',
+    hours_served: '',
+    mande_track: 'internal',
+    notes: '',
+  })
+  const [busy, setBusy] = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await createVolunteerEngagement({
+        volunteer_id: volunteerId,
+        organisation_name: form.organisation_name.trim(),
+        role_title: form.role_title.trim() || null,
+        start_date: form.start_date,
+        end_date: form.end_date,
+        hours_served: Number(form.hours_served),
+        mande_track: form.mande_track,
+        notes: form.notes.trim() || null,
+      })
+      onSaved()
+    } catch (err) {
+      toast.error(err.message || 'Could not save engagement.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="afri-card mb-4 grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
+      <input className="afri-input sm:col-span-2" placeholder="Organisation name" required value={form.organisation_name} onChange={(e) => setForm((f) => ({ ...f, organisation_name: e.target.value }))} />
+      <input className="afri-input" placeholder="Role title" value={form.role_title} onChange={(e) => setForm((f) => ({ ...f, role_title: e.target.value }))} />
+      <input className="afri-input" type="number" min={1} step={0.5} placeholder="Hours served" required value={form.hours_served} onChange={(e) => setForm((f) => ({ ...f, hours_served: e.target.value }))} />
+      <input className="afri-input" type="date" required value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} />
+      <input className="afri-input" type="date" required value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} />
+      <select className="afri-input sm:col-span-2" value={form.mande_track} onChange={(e) => setForm((f) => ({ ...f, mande_track: e.target.value }))}>
+        <option value="internal">{MANDE_TRACK_LABELS.internal}</option>
+        <option value="external">{MANDE_TRACK_LABELS.external}</option>
+      </select>
+      <textarea className="afri-input sm:col-span-2" rows={2} placeholder="Notes (optional)" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+      <button type="submit" disabled={busy} className="afri-btn-primary sm:col-span-2">{busy ? 'Saving…' : 'Save past engagement'}</button>
+    </form>
   )
 }
 

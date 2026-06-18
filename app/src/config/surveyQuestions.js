@@ -126,3 +126,34 @@ export const ORG_SURVEY = {
     ],
   },
 }
+
+/** External / media publication questionnaires — same scoring fields, different framing. */
+export const VOLUNTEER_SURVEY_EXTERNAL = {
+  ...VOLUNTEER_SURVEY,
+  type: 'volunteer',
+  track: 'external',
+  overall: {
+    ...VOLUNTEER_SURVEY.overall,
+    title: 'Overall experience (shareable summary)',
+  },
+}
+
+export const ORG_SURVEY_EXTERNAL = {
+  ...ORG_SURVEY,
+  type: 'org',
+  track: 'external',
+  overall: {
+    ...ORG_SURVEY.overall,
+    title: 'Overall assessment (publication-ready summary)',
+  },
+}
+
+export function getSurveyConfigForTrack(type, track = 'internal') {
+  if (type === 'org') return track === 'external' ? ORG_SURVEY_EXTERNAL : ORG_SURVEY
+  return track === 'external' ? VOLUNTEER_SURVEY_EXTERNAL : VOLUNTEER_SURVEY
+}
+
+export const MANDE_TRACK_LABELS = {
+  internal: 'Internal (Afrivate evaluation)',
+  external: 'External (Media / publication)',
+}

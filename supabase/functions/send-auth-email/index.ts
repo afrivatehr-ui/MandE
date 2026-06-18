@@ -11,8 +11,8 @@
 //
 // Deploy: npx supabase functions deploy send-auth-email --no-verify-jwt
 // =============================================================================
-import { Webhook } from 'https://esm.sh/standardwebhooks@1.0.0'
-import { escapeHtml, parseFrom, sendTransactionalMail } from '../_shared/mail-transport.ts'
+import { escapeHtml, parseFrom, sendTransactionalMail, isSmtpConfigured } from '../_shared/mail-transport.ts'
+import { verifyAuthHook, type AuthHookEmailData, type AuthHookUser } from '../_shared/auth-hook.ts'
 import {
   authConfirmationUrl,
   BRAND,
@@ -32,23 +32,8 @@ const { fromName, fromEmail } = parseFrom(
   Deno.env.get('EMAIL_FROM') ?? 'Afrivate M&E <afrivatehr@gmail.com>',
 )
 
-type EmailData = {
-  token: string
-  token_hash: string
-  redirect_to: string
-  email_action_type: string
-  site_url: string
-  token_new: string
-  token_hash_new: string
-  old_email?: string
-  provider?: string
-  factor_type?: string
-}
-
-type AuthUser = {
-  email: string
-  user_metadata?: { name?: string; full_name?: string }
-}
+type EmailData = AuthHookEmailData
+type AuthUser = AuthHookUser
 
 const SUBJECTS: Record<string, string> = {
   signup: 'Confirm your Afrivate M&E email address',
@@ -77,67 +62,6 @@ const SECURITY_NOTIFICATIONS = new Set([
   'mfa_factor_unenrolled_notification',
 ])
 
-/** Strip v1,whsec_ / whsec_ wrappers; keep the raw value Supabase generated. */
-function normalizeHookSecret(raw: string): string {
-  let s = raw.trim().replace(/^['"]|['"]$/g, '')
-  if (s.startsWith('v1,whsec_')) return s.slice('v1,whsec_'.length)
-  if (s.startsWith('whsec_')) return s.slice('whsec_'.length)
-  return s
-}
-
-function hookHeaders(req: Request): Record<string, string> {
-  const headers: Record<string, string> = {}
-  req.headers.forEach((value, key) => {
-    headers[key.toLowerCase()] = value
-  })
-  return headers
-}
-
-type HookPayload = { user: AuthUser; email_data: EmailData }
-
-function verifyAuthHook(req: Request, payload: string, hookSecretRaw: string): HookPayload {
-  const trimmedRaw = hookSecretRaw.trim().replace(/^['"]|['"]$/g, '')
-  const base64Secret = normalizeHookSecret(trimmedRaw)
-  const headers = hookHeaders(req)
-
-  // Standard Webhooks HMAC (normal path when secret is synced correctly)
-  if (headers['webhook-signature']) {
-    const wh = new Webhook(base64Secret)
-    return wh.verify(payload, headers) as HookPayload
-  }
-
-  // Some GoTrue builds send Authorization: Bearer <same secret as dashboard>
-  const auth = headers['authorization'] ?? ''
-  const bearer = auth.replace(/^Bearer\s+/i, '').trim()
-  if (bearer) {
-    const bearerBase = normalizeHookSecret(bearer)
-    if (
-      bearer === trimmedRaw
-      || bearerBase === base64Secret
-      || bearer === `v1,whsec_${base64Secret}`
-      || bearer === `whsec_${base64Secret}`
-    ) {
-      return JSON.parse(payload) as HookPayload
-    }
-  }
-
-  // Known Supabase quirk: hook fires without signature headers (github.com/supabase/auth#2499).
-  // Only accept unsigned payloads from GoTrue's user-agent to avoid open relay abuse.
-  const ua = headers['user-agent'] ?? ''
-  if (/Go-http-client|GoTrue|Supabase/i.test(ua)) {
-    console.warn('Auth hook: unsigned GoTrue request — verify SEND_EMAIL_HOOK_SECRET matches the hook secret')
-    const parsed = JSON.parse(payload) as HookPayload
-    if (parsed?.user?.email && parsed?.email_data?.email_action_type) {
-      return parsed
-    }
-  }
-
-  throw new Error(
-    'Hook verification failed. In Supabase: Auth → Hooks → Send Email → regenerate secret, '
-    + 'then paste the full value into Edge Function secret SEND_EMAIL_HOOK_SECRET.',
-  )
-}
-
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: { message: 'Method not allowed' } }), {
@@ -147,11 +71,17 @@ Deno.serve(async (req) => {
   }
 
   const hookSecretRaw = Deno.env.get('SEND_EMAIL_HOOK_SECRET') ?? ''
-  if (!hookSecretRaw) {
+  if (!hookSecretRaw.trim()) {
     return new Response(JSON.stringify({ error: { message: 'SEND_EMAIL_HOOK_SECRET not configured' } }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     })
+  }
+
+  if (!isSmtpConfigured()) {
+    return new Response(JSON.stringify({
+      error: { message: 'SMTP_USER and SMTP_PASS must be set on this Edge Function.' },
+    }), { status: 500, headers: { 'Content-Type': 'application/json' } })
   }
 
   const payload = await req.text()
@@ -162,33 +92,27 @@ Deno.serve(async (req) => {
   try {
     ;({ user, email_data } = verifyAuthHook(req, payload, hookSecretRaw))
   } catch (err) {
-    console.error('send-auth-email hook rejected:', err, {
-      hasWebhookSignature: Boolean(req.headers.get('webhook-signature')),
-      hasAuthorization: Boolean(req.headers.get('authorization')),
-      userAgent: req.headers.get('user-agent'),
-    })
-    // Return 500 (not 401) so GoTrue does not surface the misleading
-    // "Hook requires authorization token" message for signature mismatches.
+    console.error('send-auth-email hook rejected:', err)
     return new Response(JSON.stringify({ error: { message: String((err as Error)?.message ?? err) } }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     })
   }
 
-  const action = email_data.email_action_type
-  const firstName = (user.user_metadata?.name ?? user.user_metadata?.full_name ?? 'there').split(' ')[0]
-  const confirmUrl = SECURITY_NOTIFICATIONS.has(action)
-    ? ''
-    : authConfirmationUrl(supabaseUrl, email_data)
-  const { subject, html, text } = buildAuthEmail(action, {
-    firstName,
-    confirmUrl,
-    token: email_data.token,
-    email: user.email,
-    emailData: email_data,
-  })
-
   try {
+    const action = email_data.email_action_type
+    const firstName = (user.user_metadata?.name ?? user.user_metadata?.full_name ?? 'there').split(' ')[0]
+    const confirmUrl = SECURITY_NOTIFICATIONS.has(action)
+      ? ''
+      : authConfirmationUrl(supabaseUrl, email_data)
+    const { subject, html, text } = buildAuthEmail(action, {
+      firstName,
+      confirmUrl,
+      token: email_data.token,
+      email: user.email,
+      emailData: email_data,
+    })
+
     await sendTransactionalMail({
       fromName,
       fromEmail,
@@ -199,17 +123,18 @@ Deno.serve(async (req) => {
       replyTo: fromEmail,
       category: `auth-${action}`,
     })
+
+    return new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
   } catch (err) {
+    console.error('send-auth-email send failed:', err)
     return new Response(JSON.stringify({ error: { message: String((err as Error)?.message ?? err) } }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     })
   }
-
-  return new Response(JSON.stringify({}), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
 })
 
 function buildAuthEmail(
