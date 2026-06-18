@@ -347,7 +347,7 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
   const { data: deployment } = await supabase
     .from('deployments')
     .select(
-      'id, role_title, org_contact_role, start_date, end_date, archived_at, mande_track, volunteers ( volunteer_id, full_name, archived_at ), organisations ( name, archived_at )',
+      'id, role_title, org_contact_role, start_date, end_date, status, archived_at, mande_track, volunteers ( volunteer_id, full_name, archived_at ), organisations ( name, archived_at )',
     )
     .eq('id', tokenRow.deployment_id)
     .single()
@@ -355,6 +355,9 @@ async function loadContext(supabase: ReturnType<typeof createClient>, token: str
   if (!deployment) return { error: 'Deployment not found.', status: 404 }
   if (deployment.archived_at) {
     return { error: 'This deployment is no longer active.', status: 410 }
+  }
+  if (deployment.status === 'COMPLETED') {
+    return { error: 'This deployment has been completed.', status: 410 }
   }
 
   const vol = one(deployment.volunteers)

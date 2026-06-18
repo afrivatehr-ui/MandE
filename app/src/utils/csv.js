@@ -1,4 +1,5 @@
 import Papa from 'papaparse'
+import { MANDE_TRACK_LABELS } from '../config/surveyQuestions'
 
 export function deploymentsToRows(deployments) {
   return deployments.map((d) => ({
@@ -10,6 +11,8 @@ export function deploymentsToRows(deployments) {
     Start: d.start_date,
     End: d.end_date,
     Status: d.status,
+    'M&E Track': MANDE_TRACK_LABELS[d.mande_track] ?? d.mande_track ?? 'Internal',
+    'Hours Served': d.hours_served ?? '',
     'Task Performance': d.task ?? '',
     Professionalism: d.prof ?? '',
     Impact: d.impact ?? '',

@@ -1,5 +1,15 @@
 /** Total volunteer hours badge for profile / certificate views. */
-export default function VolunteerHoursBadge({ hours, className = '' }) {
+export default function VolunteerHoursBadge({ hours, warning, className = '' }) {
+  if (warning) {
+    return (
+      <div
+        className={`inline-flex flex-col items-center rounded-xl border border-afri-orange/30 bg-afri-orange/10 px-4 py-3 text-center ${className}`}
+        title={warning}
+      >
+        <span className="font-body text-xs text-afri-orange">Hours unavailable</span>
+      </div>
+    )
+  }
   const value = Number(hours ?? 0)
   const label = value === 1 ? 'hour volunteered' : 'hours volunteered'
   return (

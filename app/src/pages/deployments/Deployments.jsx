@@ -23,6 +23,7 @@ import {
   sendSurveyEmails,
   updateDeploymentStatus,
   archiveDeployment,
+  updateDeployment,
   nextVolunteerCode,
 } from '../../api/data'
 import { MANDE_TRACK_LABELS } from '../../config/surveyQuestions'
@@ -81,6 +82,7 @@ export default function Deployments() {
   const [showCreate, setShowCreate] = useState(false)
   const [confirmComplete, setConfirmComplete] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [editDeployment, setEditDeployment] = useState(null)
 
   const rows = useMemo(() => {
     if (!deployments) return []
@@ -151,6 +153,17 @@ export default function Deployments() {
     { key: 'orgName', header: 'Organisation', sortable: true },
     { key: 'period', header: 'Period', render: (r) => <span className="text-xs">{formatDateRange(r.start_date, r.end_date)}</span> },
     {
+      key: 'mande_track',
+      header: 'Track',
+      render: (r) => <span className="text-xs">{MANDE_TRACK_LABELS[r.mande_track] ?? 'Internal'}</span>,
+    },
+    {
+      key: 'hours_served',
+      header: 'Hours',
+      align: 'right',
+      render: (r) => (r.hours_served == null ? '—' : Number(r.hours_served).toLocaleString()),
+    },
+    {
       key: 'status', header: 'Status', render: (r) => (
         <span className="rounded-full bg-afri-lavender px-2.5 py-1 font-body text-xs text-afri-purple">
           {STATUS_LABEL[r.status]}
@@ -183,6 +196,7 @@ export default function Deployments() {
           onView={() => navigate(`/volunteers/${r.volunteer_id}`)}
           onCopyLinks={() => copyLinks(r)}
           onSendEmail={(types) => resendMutation.mutate({ id: r.id, types })}
+          onEdit={() => setEditDeployment(r)}
           onComplete={() => setConfirmComplete(r)}
           onRemove={() => setConfirmDelete(r)}
         />
@@ -236,6 +250,7 @@ export default function Deployments() {
               onView={(r) => navigate(`/volunteers/${r.volunteer_id}`)}
               onCopyLinks={copyLinks}
               onSendEmail={(r, types) => resendMutation.mutate({ id: r.id, types })}
+              onEdit={setEditDeployment}
               onComplete={setConfirmComplete}
               onRemove={setConfirmDelete}
             />
@@ -247,6 +262,12 @@ export default function Deployments() {
       )}
 
       {showCreate && <CreateDeploymentModal onClose={() => setShowCreate(false)} />}
+      {editDeployment && (
+        <EditDeploymentModal
+          deployment={editDeployment}
+          onClose={() => setEditDeployment(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(confirmComplete)}
@@ -545,6 +566,78 @@ function CreateDeploymentModal({ onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function EditDeploymentModal({ deployment, onClose }) {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({
+    hours_served: deployment.hours_served ?? '',
+    mande_track: deployment.mande_track ?? 'internal',
+  })
+  const [busy, setBusy] = useState(false)
+
+  async function handleSave(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await updateDeployment(deployment.id, {
+        hours_served: form.hours_served === '' ? null : form.hours_served,
+        mande_track: form.mande_track,
+      })
+      queryClient.invalidateQueries({ queryKey: ['deployments'] })
+      queryClient.invalidateQueries({ queryKey: ['volunteer', deployment.volunteer_id] })
+      toast.success('Deployment updated.')
+      onClose()
+    } catch (err) {
+      toast.error(err.message || 'Could not update deployment.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-afri-black/40 p-4" onClick={onClose}>
+      <form
+        className="afri-card w-full max-w-md p-6"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleSave}
+      >
+        <h2 className="mb-1 font-heading text-h3 text-afri-purple">Edit deployment</h2>
+        <p className="mb-4 font-body text-sm text-afri-black/60">
+          {deployment.volunteerName} at {deployment.orgName}
+        </p>
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="afri-label">Hours served</label>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              className="afri-input w-full"
+              value={form.hours_served}
+              onChange={(e) => setForm((f) => ({ ...f, hours_served: e.target.value }))}
+              placeholder="Optional"
+            />
+          </div>
+          <div>
+            <label className="afri-label">M&amp;E track</label>
+            <select
+              className="afri-input w-full"
+              value={form.mande_track}
+              onChange={(e) => setForm((f) => ({ ...f, mande_track: e.target.value }))}
+            >
+              <option value="internal">{MANDE_TRACK_LABELS.internal}</option>
+              <option value="external">{MANDE_TRACK_LABELS.external}</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="afri-btn-secondary">Cancel</button>
+          <button type="submit" disabled={busy} className="afri-btn-primary">{busy ? 'Saving…' : 'Save'}</button>
+        </div>
+      </form>
     </div>
   )
 }

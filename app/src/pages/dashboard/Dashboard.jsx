@@ -30,6 +30,7 @@ import {
 } from '../../utils/analytics'
 import { categoryHex } from '../../utils/category'
 import { formatVpi, formatDateTime } from '../../utils/format'
+import { mapApiError } from '../../utils/mapApiError'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -201,9 +202,10 @@ function NoChartData({ label = 'No scored deployments yet.' }) {
 }
 
 export function ErrorNote({ error }) {
+  const message = error?.message || mapApiError(error)
   return (
     <div className="rounded-card border border-afri-red/30 bg-afri-red/5 p-5 font-body text-sm text-afri-red">
-      We couldn&apos;t load this page. {error?.message || 'Please refresh and try again.'}
+      We couldn&apos;t load this page. {message || 'Please refresh and try again.'}
     </div>
   )
 }

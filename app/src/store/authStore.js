@@ -116,10 +116,6 @@ export const useAuthStore = create((set, get) => ({
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     if (error) throw error
   },
-
-  get role() {
-    return get().profile?.role ?? null
-  },
 }))
 
 export const isWriter = (role) => role === 'ADMIN' || role === 'HR'

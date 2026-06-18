@@ -7,3 +7,5 @@ verify_jwt = false
 
 [functions.request-access]
 verify_jwt = false
+
+# admin-users and send-survey-emails use default verify_jwt = true (authenticated callers)

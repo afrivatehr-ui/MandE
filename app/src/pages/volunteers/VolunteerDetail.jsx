@@ -12,7 +12,7 @@ import { ErrorNote } from '../dashboard/Dashboard'
 import { mapApiError } from '../../utils/mapApiError'
 import { useVolunteer } from '../../hooks/useData'
 import { useAuthStore, isWriter } from '../../store/authStore'
-import { archiveVolunteer, createVolunteerEngagement, deleteVolunteerEngagement } from '../../api/data'
+import { archiveVolunteer, createVolunteerEngagement, updateVolunteerEngagement, deleteVolunteerEngagement } from '../../api/data'
 import { toast } from '../../store/toastStore'
 import { getActionDescription } from '../../utils/vpiEngine'
 import { initials, formatDateRange, formatVpi } from '../../utils/format'
@@ -28,6 +28,8 @@ export default function VolunteerDetail() {
   const { data, isLoading, error } = useVolunteer(id)
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [showAddEngagement, setShowAddEngagement] = useState(false)
+  const [confirmRemoveEngagement, setConfirmRemoveEngagement] = useState(null)
+  const [editEngagement, setEditEngagement] = useState(null)
 
   const archiveMutation = useMutation({
     mutationFn: () => archiveVolunteer(id),
@@ -58,7 +60,7 @@ export default function VolunteerDetail() {
     return <ErrorNote error={error} />
   }
 
-  const { volunteer, deployments, engagements = [], totalHours = 0 } = data
+  const { volunteer, deployments, engagements = [], totalHours = 0, hoursWarning = null } = data
   const latest = deployments.find((d) => d.vpi != null) || deployments[0] || null
   const isArchived = Boolean(volunteer.archived_at)
 
@@ -98,7 +100,7 @@ export default function VolunteerDetail() {
           </div>
         </div>
         <div className="flex flex-col items-center gap-3 sm:items-end">
-          <VolunteerHoursBadge hours={totalHours} />
+          <VolunteerHoursBadge hours={totalHours} warning={hoursWarning} />
           <VPIRing score={latest?.vpi == null ? null : Number(latest.vpi)} category={latest?.category} />
         </div>
       </div>
@@ -140,6 +142,18 @@ export default function VolunteerDetail() {
             }}
           />
         )}
+        {editEngagement && (
+          <PastEngagementForm
+            volunteerId={volunteer.id}
+            initial={editEngagement}
+            onSaved={() => {
+              queryClient.invalidateQueries({ queryKey: ['volunteer', id] })
+              setEditEngagement(null)
+              toast.success('Engagement updated.')
+            }}
+            onCancel={() => setEditEngagement(null)}
+          />
+        )}
         {engagements.length ? (
           <DataTable
             rows={engagements}
@@ -150,22 +164,28 @@ export default function VolunteerDetail() {
               { key: 'period', header: 'Period', render: (r) => <span className="text-xs">{formatDateRange(r.start_date, r.end_date)}</span> },
               { key: 'hours_served', header: 'Hours', align: 'right', render: (r) => Number(r.hours_served).toLocaleString() },
               { key: 'mande_track', header: 'Track', render: (r) => <span className="text-xs">{MANDE_TRACK_LABELS[r.mande_track] ?? r.mande_track}</span> },
+              { key: 'notes', header: 'Notes', render: (r) => <span className="text-xs text-afri-black/60">{r.notes?.trim() || '—'}</span> },
               ...(canWrite ? [{
                 key: 'actions',
                 header: '',
                 align: 'right',
                 render: (r) => (
-                  <button
-                    type="button"
-                    className="text-xs text-afri-red hover:underline"
-                    onClick={async () => {
-                      await deleteVolunteerEngagement(r.id)
-                      queryClient.invalidateQueries({ queryKey: ['volunteer', id] })
-                      toast.success('Engagement removed.')
-                    }}
-                  >
-                    Remove
-                  </button>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      className="text-xs text-afri-purple hover:underline"
+                      onClick={() => setEditEngagement(r)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-afri-red hover:underline"
+                      onClick={() => setConfirmRemoveEngagement(r)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 ),
               }] : []),
             ]}
@@ -218,6 +238,25 @@ export default function VolunteerDetail() {
       </div>
 
       <ConfirmDialog
+        open={Boolean(confirmRemoveEngagement)}
+        title="Remove past engagement?"
+        message={`Remove ${confirmRemoveEngagement?.organisation_name ?? 'this engagement'} from the volunteer's history?`}
+        confirmLabel="Remove"
+        tone="danger"
+        onCancel={() => setConfirmRemoveEngagement(null)}
+        onConfirm={async () => {
+          try {
+            await deleteVolunteerEngagement(confirmRemoveEngagement.id)
+            queryClient.invalidateQueries({ queryKey: ['volunteer', id] })
+            toast.success('Engagement removed.')
+            setConfirmRemoveEngagement(null)
+          } catch (err) {
+            toast.error(err.message || 'Could not remove engagement.')
+          }
+        }}
+      />
+
+      <ConfirmDialog
         open={confirmArchive}
         title="Archive this volunteer?"
         message={`${volunteer.full_name} will be removed from active lists. All deployment and survey data stays in Reports.`}
@@ -231,24 +270,28 @@ export default function VolunteerDetail() {
   )
 }
 
-function PastEngagementForm({ volunteerId, onSaved }) {
+function PastEngagementForm({ volunteerId, initial, onSaved, onCancel }) {
+  const isEdit = Boolean(initial?.id)
   const [form, setForm] = useState({
-    organisation_name: '',
-    role_title: '',
-    start_date: '',
-    end_date: '',
-    hours_served: '',
-    mande_track: 'internal',
-    notes: '',
+    organisation_name: initial?.organisation_name ?? '',
+    role_title: initial?.role_title ?? '',
+    start_date: initial?.start_date ?? '',
+    end_date: initial?.end_date ?? '',
+    hours_served: initial?.hours_served ?? '',
+    mande_track: initial?.mande_track ?? 'internal',
+    notes: initial?.notes ?? '',
   })
   const [busy, setBusy] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (form.end_date && form.start_date && form.end_date < form.start_date) {
+      toast.error('End date must be on or after the start date.')
+      return
+    }
     setBusy(true)
     try {
-      await createVolunteerEngagement({
-        volunteer_id: volunteerId,
+      const payload = {
         organisation_name: form.organisation_name.trim(),
         role_title: form.role_title.trim() || null,
         start_date: form.start_date,
@@ -256,7 +299,9 @@ function PastEngagementForm({ volunteerId, onSaved }) {
         hours_served: Number(form.hours_served),
         mande_track: form.mande_track,
         notes: form.notes.trim() || null,
-      })
+      }
+      if (isEdit) await updateVolunteerEngagement(initial.id, payload)
+      else await createVolunteerEngagement({ volunteer_id: volunteerId, ...payload })
       onSaved()
     } catch (err) {
       toast.error(err.message || 'Could not save engagement.')
@@ -277,7 +322,12 @@ function PastEngagementForm({ volunteerId, onSaved }) {
         <option value="external">{MANDE_TRACK_LABELS.external}</option>
       </select>
       <textarea className="afri-input sm:col-span-2" rows={2} placeholder="Notes (optional)" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
-      <button type="submit" disabled={busy} className="afri-btn-primary sm:col-span-2">{busy ? 'Saving…' : 'Save past engagement'}</button>
+      <div className="flex gap-2 sm:col-span-2">
+        <button type="submit" disabled={busy} className="afri-btn-primary flex-1">{busy ? 'Saving…' : isEdit ? 'Save changes' : 'Save past engagement'}</button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="afri-btn-secondary">Cancel</button>
+        )}
+      </div>
     </form>
   )
 }

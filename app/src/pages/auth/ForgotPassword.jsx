@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import AuthCard from '../../components/auth/AuthCard'
 import { FullPageSpinner } from '../../components/Spinner'
 import Spinner from '../../components/Spinner'
 
 export default function ForgotPassword() {
-  const { resetPasswordForEmail, bootstrapped } = useAuthStore()
+  const { resetPasswordForEmail, bootstrapped, session } = useAuthStore()
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -27,6 +27,7 @@ export default function ForgotPassword() {
   }
 
   if (!bootstrapped) return <FullPageSpinner label="Loading" />
+  if (session) return <Navigate to="/dashboard" replace />
 
   if (sent) {
     return (

@@ -85,20 +85,8 @@ export function verifyAuthHook(req: Request, payload: string, hookSecretRaw: str
     }
   }
 
-  // GoTrue calls without signature headers (supabase/auth#2499) — accept well-formed payload.
-  const ua = headers['user-agent'] ?? ''
-  if (/Go-http-client|GoTrue|Supabase/i.test(ua)) {
-    console.warn('send-auth-email: unsigned GoTrue request accepted')
-    return parseHookPayload(payload)
-  }
-
-  // Last resort: valid payload shape + secret configured (hook URL is non-guessable).
-  try {
-    return parseHookPayload(payload)
-  } catch (err) {
-    throw new Error(
-      `Auth hook rejected: ${(err as Error).message}. Regenerate secret in Auth → Hooks → Send Email `
-      + 'and paste into SEND_EMAIL_HOOK_SECRET.',
-    )
-  }
+  throw new Error(
+    'Auth hook rejected: missing or invalid webhook signature. '
+    + 'In Auth → Hooks → Send Email, regenerate the secret and set SEND_EMAIL_HOOK_SECRET on this function.',
+  )
 }

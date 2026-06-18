@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import SurveyFlow from '../../components/survey/SurveyFlow'
 import { getSurveyConfig } from '../../api/data'
+import { isOrgSurveyKey } from '../../utils/surveyKeys'
 
 // Sample deployment context so built-in previews look like a real survey
 // without touching the database or needing a token.
@@ -42,7 +43,7 @@ export default function SurveyPreview({ survey, onClose }) {
   }
 
   const heading = survey.is_builtin
-    ? survey.key === 'org'
+    ? isOrgSurveyKey(survey.key)
       ? 'Organisation Feedback Survey'
       : 'Volunteer Self-Report Survey'
     : survey.title

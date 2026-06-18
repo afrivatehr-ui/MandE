@@ -4,6 +4,7 @@ import SurveyStatus from '../SurveyStatus'
 import ScoreBar from '../ScoreBar'
 import DeploymentActions from '../DeploymentActions'
 import { formatDateRange, formatVpi, STATUS_LABEL } from '../../utils/format'
+import { MANDE_TRACK_LABELS } from '../../config/surveyQuestions'
 import { categoryHex } from '../../utils/category'
 
 /** Volunteers tab — rich mobile cards */
@@ -143,6 +144,7 @@ export function DeploymentMobileList({
   onView,
   onCopyLinks,
   onSendEmail,
+  onEdit,
   onComplete,
   onRemove,
 }) {
@@ -174,6 +176,10 @@ export function DeploymentMobileList({
             <div>
               <p className="font-body text-xs text-afri-black/45">Period</p>
               <p className="font-body text-sm">{formatDateRange(r.start_date, r.end_date)}</p>
+              <p className="mt-1 font-body text-xs text-afri-black/50">
+                {MANDE_TRACK_LABELS[r.mande_track] ?? 'Internal'}
+                {r.hours_served != null ? ` · ${Number(r.hours_served).toLocaleString()} hrs` : ''}
+              </p>
             </div>
             <div className="text-right">
               <p className="font-body text-xs text-afri-black/45">VPI</p>
@@ -200,6 +206,7 @@ export function DeploymentMobileList({
               onView={() => onView(r)}
               onCopyLinks={() => onCopyLinks(r)}
               onSendEmail={(types) => onSendEmail(r, types)}
+              onEdit={onEdit ? () => onEdit(r) : undefined}
               onComplete={() => onComplete(r)}
               onRemove={() => onRemove(r)}
             />

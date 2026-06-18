@@ -4,14 +4,16 @@ import { mapApiError } from '../utils/mapApiError'
 function parseFunctionError(data, error) {
   if (data?.error) return data.error
   if (data?.success === false) return data.error || 'Something went wrong. Please try again.'
-  if (error?.message) return error.message
+  if (error?.message && !/non-2xx/i.test(error.message)) return error.message
+  if (data?.message) return data.message
   return 'Something went wrong. Please try again.'
 }
 
 function unwrapInvoke(result) {
   const { data, error } = result
+  if (data?.error) throw new Error(data.error)
   if (data?.success === false) throw new Error(parseFunctionError(data, error))
-  if (error && !data?.success) throw new Error(parseFunctionError(data, error))
+  if (error) throw new Error(parseFunctionError(data, error))
   return data
 }
 

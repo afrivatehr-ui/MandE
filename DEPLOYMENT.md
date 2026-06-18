@@ -97,6 +97,8 @@ of each file below and click **Run**, one at a time, **in this exact order**:
 12. `supabase/migrations/20260610000012_audit_followup.sql` (restrict publish RPC to staff)
 13. `supabase/migrations/20260611000013_audit_followup2.sql` (survey insert triggers + access RLS)
 14. `supabase/migrations/20260612000014_audit_followup3.sql` (token read + archived guards)
+15. `supabase/migrations/20260619000015_engagements_mande_tracks.sql` (hours, past engagements, internal/external M&E)
+16. `supabase/migrations/20260620000016_audit_fixes_role_surveys.sql` (service-role profile updates, builtin survey protect, hours map)
 15. `supabase/seed.sql`  (optional sample data + the admin login)
 
 Each run should report success. After file 4, you'll have a login:

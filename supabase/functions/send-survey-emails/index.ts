@@ -35,10 +35,8 @@ const { fromName, fromEmail } = parseFrom(
 const appUrl = (Deno.env.get('APP_URL') ?? 'http://localhost:5173').replace(/\/$/, '')
 const logoUrl = (Deno.env.get('LOGO_URL') ?? `${appUrl}/logos/afrivate-full-logo-purple.png`).replace(/\/$/, '')
 
-function parseFrom(s: string): { fromName?: string; fromEmail: string } {
-  const m = s.match(/^\s*(.*?)\s*<\s*([^>]+?)\s*>\s*$/)
-  if (m) return { fromName: m[1] || undefined, fromEmail: m[2] }
-  return { fromEmail: s.trim() }
+function surveyRegistryKey(type: string, track: string | null | undefined) {
+  return track === 'external' ? `${type}_external` : type
 }
 
 // PostgREST may return embedded FK relations as an object or a single-item array.
@@ -87,7 +85,7 @@ Deno.serve(async (req) => {
     const { data: deployment, error: depErr } = await admin
       .from('deployments')
       .select(
-        'id, role_title, org_contact_role, start_date, end_date, archived_at, volunteer_id, organisation_id, volunteers ( full_name, email, archived_at ), organisations ( name, contact_name, contact_email, contact_title, archived_at )',
+        'id, role_title, org_contact_role, start_date, end_date, archived_at, mande_track, volunteer_id, organisation_id, volunteers ( full_name, email, archived_at ), organisations ( name, contact_name, contact_email, contact_title, archived_at )',
       )
       .eq('id', deploymentId)
       .single()
@@ -111,6 +109,8 @@ Deno.serve(async (req) => {
     const publishedTypes = await getPublishedTypes(admin)
     const isOpen = (type: string) => publishedTypes === null || publishedTypes.has(type)
 
+    const track = (deployment.mande_track as string | null) ?? 'internal'
+
     const vol = one(deployment.volunteers)
     const org = one(deployment.organisations)
     const period = `${fmt(deployment.start_date)} – ${fmt(deployment.end_date)}`
@@ -124,7 +124,8 @@ Deno.serve(async (req) => {
 
     // --- Volunteer ----------------------------------------------------------
     if (sendTypes.includes('volunteer')) {
-      if (!isOpen('volunteer')) {
+      const regKey = surveyRegistryKey('volunteer', track)
+      if (!isOpen(regKey)) {
         skipped.push('volunteer')
       } else if (!vol?.email) {
         missing.push('volunteer')
@@ -150,7 +151,8 @@ Deno.serve(async (req) => {
 
     // --- Organisation -------------------------------------------------------
     if (sendTypes.includes('org')) {
-      if (!isOpen('org')) {
+      const regKey = surveyRegistryKey('org', track)
+      if (!isOpen(regKey)) {
         skipped.push('org')
       } else if (!org?.contact_email) {
         missing.push('org')

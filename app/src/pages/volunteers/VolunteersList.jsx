@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import PageHeader from '../../components/PageHeader'
 import DataTable from '../../components/DataTable'
 import { VolunteerMobileList } from '../../components/mobile/MobileCards'
@@ -12,6 +13,7 @@ import Spinner from '../../components/Spinner'
 import { ErrorNote } from '../dashboard/Dashboard'
 import { useAuthStore, isWriter } from '../../store/authStore'
 import { useDeployments, useOrganisations } from '../../hooks/useData'
+import { fetchVolunteerHoursMap } from '../../api/data'
 import { formatDateRange, formatVpi } from '../../utils/format'
 
 export default function VolunteersList() {
@@ -19,6 +21,7 @@ export default function VolunteersList() {
   const canWrite = isWriter(useAuthStore((s) => s.profile?.role))
   const { data: deployments, isLoading, error } = useDeployments()
   const { data: organisations } = useOrganisations()
+  const { data: hoursMap } = useQuery({ queryKey: ['volunteerHoursMap'], queryFn: fetchVolunteerHoursMap })
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('')
   const [orgId, setOrgId] = useState('')
@@ -66,6 +69,16 @@ export default function VolunteersList() {
       ),
     },
     { key: 'orgName', header: 'Organisation', sortable: true },
+    {
+      key: 'totalHours',
+      header: 'Total hours',
+      align: 'right',
+      sortValue: (r) => hoursMap?.get(r.volunteer_id) ?? -1,
+      render: (r) => {
+        const hrs = hoursMap?.get(r.volunteer_id)
+        return hrs == null || hrs === 0 ? '—' : Number(hrs).toLocaleString()
+      },
+    },
     {
       key: 'period',
       header: 'Period',

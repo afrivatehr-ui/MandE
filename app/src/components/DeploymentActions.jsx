@@ -10,6 +10,7 @@ export default function DeploymentActions({
   onView,
   onCopyLinks,
   onSendEmail,
+  onEdit,
   onComplete,
   onRemove,
   emailBusy,
@@ -82,6 +83,12 @@ export default function DeploymentActions({
             </div>
           )}
         </div>
+      )}
+
+      {canWrite && onEdit && (
+        <ActionBtn label="Edit hours and M&E track" onClick={onEdit}>
+          Edit
+        </ActionBtn>
       )}
 
       {canWrite && row.status !== 'COMPLETED' && (

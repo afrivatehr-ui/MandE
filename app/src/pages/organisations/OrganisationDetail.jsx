@@ -23,6 +23,7 @@ import { archiveOrganisation } from '../../api/data'
 import { toast } from '../../store/toastStore'
 import { dimensionAverages, orgRanking, supervisorHighlights } from '../../utils/analytics'
 import { formatVpi, formatDateRange } from '../../utils/format'
+import { MANDE_TRACK_LABELS } from '../../config/surveyQuestions'
 
 export default function OrganisationDetail() {
   const { id } = useParams()
@@ -158,6 +159,8 @@ export default function OrganisationDetail() {
           },
           { key: 'role_title', header: 'Role' },
           { key: 'period', header: 'Period', render: (r) => <span className="text-xs">{formatDateRange(r.start_date, r.end_date)}</span> },
+          { key: 'hours_served', header: 'Hours', align: 'right', render: (r) => (r.hours_served == null ? '—' : Number(r.hours_served).toLocaleString()) },
+          { key: 'mande_track', header: 'Track', render: (r) => <span className="text-xs">{MANDE_TRACK_LABELS[r.mande_track] ?? 'Internal'}</span> },
           { key: 'vpi', header: 'VPI', align: 'right', render: (r) => <span className="font-semibold text-afri-purple">{formatVpi(r.vpi)}</span> },
           { key: 'category', header: 'Category', align: 'center', render: (r) => <VPIBadge category={r.category} showLabel={false} /> },
         ]}

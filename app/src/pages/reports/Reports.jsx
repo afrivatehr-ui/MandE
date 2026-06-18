@@ -31,6 +31,7 @@ import { categoryHex } from '../../utils/category'
 import { downloadCsv, triggerDownload } from '../../utils/csv'
 import { toast } from '../../store/toastStore'
 import { formatVpi } from '../../utils/format'
+import { MANDE_TRACK_LABELS } from '../../config/surveyQuestions'
 
 function periodBounds(period, custom) {
   const now = new Date()
@@ -55,6 +56,7 @@ function periodBounds(period, custom) {
 export default function Reports() {
   const { data: deployments, isLoading, error } = useAllDeployments()
   const [period, setPeriod] = useState('quarter')
+  const [trackFilter, setTrackFilter] = useState('all')
   const [custom, setCustom] = useState({ from: '', to: '' })
   const [pdfBusy, setPdfBusy] = useState(false)
 
@@ -62,8 +64,10 @@ export default function Reports() {
 
   const filtered = useMemo(() => {
     if (!deployments) return []
-    return deployments.filter((d) => deploymentInPeriod(d, bounds))
-  }, [deployments, bounds])
+    return deployments
+      .filter((d) => deploymentInPeriod(d, bounds))
+      .filter((d) => trackFilter === 'all' || (d.mande_track ?? 'internal') === trackFilter)
+  }, [deployments, bounds, trackFilter])
 
   const summary = useMemo(() => summarise(filtered), [filtered])
   const distribution = useMemo(() => vpiDistribution(filtered), [filtered])
@@ -119,6 +123,14 @@ export default function Reports() {
             <option value="year">This year</option>
             <option value="all">All time</option>
             <option value="custom">Custom range</option>
+          </select>
+        </div>
+        <div>
+          <label className="afri-label">M&amp;E track</label>
+          <select value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)} className="afri-input">
+            <option value="all">All tracks</option>
+            <option value="internal">{MANDE_TRACK_LABELS.internal}</option>
+            <option value="external">{MANDE_TRACK_LABELS.external}</option>
           </select>
         </div>
         {period === 'custom' && (

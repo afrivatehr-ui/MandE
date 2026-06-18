@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase'
 import { VOLUNTEER_SURVEY, ORG_SURVEY, getSurveyConfigForTrack } from '../config/surveyQuestions'
 import { mapApiError } from '../utils/mapApiError'
+import { isOrgSurveyKey, trackFromSurveyKey } from '../utils/surveyKeys'
 
 function throwDb(error) {
   if (error) {
@@ -168,7 +169,7 @@ export async function fetchOrganisations() {
 export async function fetchVolunteer(id) {
   const { data, error } = await supabase.from('volunteers').select('*').eq('id', id).single()
   if (error) throwDb(error)
-  const [{ data: deps, error: depErr }, { data: engagements, error: engErr }, { data: hoursRow }] = await Promise.all([
+  const [{ data: deps, error: depErr }, { data: engagements, error: engErr }, hoursResult] = await Promise.all([
     supabase
       .from('deployments')
       .select(DEPLOYMENT_DETAIL_SELECT)
@@ -183,6 +184,8 @@ export async function fetchVolunteer(id) {
   ])
   if (depErr) throwDb(depErr)
   if (engErr && engErr.code !== 'PGRST205' && engErr.code !== '42P01') throwDb(engErr)
+  const { data: hoursRow, error: hoursErr } = hoursResult
+  if (hoursErr && hoursErr.code !== '42883' && hoursErr.code !== 'PGRST202') throwDb(hoursErr)
   const ids = (deps ?? []).map((d) => d.id)
   const { volByDep, orgByDep } = await loadFullSurveyRowsByDeployment(ids)
   return {
@@ -191,12 +194,28 @@ export async function fetchVolunteer(id) {
       normaliseDeployment(d, volByDep.get(d.id), orgByDep.get(d.id)),
     ),
     engagements: engagements ?? [],
-    totalHours: Number(hoursRow ?? 0),
+    totalHours: hoursErr ? null : Number(hoursRow ?? 0),
+    hoursWarning: hoursErr ? 'Total hours unavailable — apply migration 015 in Supabase.' : null,
   }
+}
+
+export async function fetchVolunteerHoursMap() {
+  const { data, error } = await supabase.rpc('volunteer_hours_map')
+  if (error) {
+    if (error.code === '42883' || error.code === 'PGRST202') return new Map()
+    throwDb(error)
+  }
+  return new Map((data ?? []).map((row) => [row.volunteer_id, Number(row.total_hours ?? 0)]))
 }
 
 export async function createVolunteerEngagement(payload) {
   const { data, error } = await supabase.from('volunteer_engagements').insert(payload).select().single()
+  if (error) throwDb(error)
+  return data
+}
+
+export async function updateVolunteerEngagement(id, patch) {
+  const { data, error } = await supabase.from('volunteer_engagements').update(patch).eq('id', id).select().single()
   if (error) throwDb(error)
   return data
 }
@@ -272,6 +291,20 @@ export async function createSurveyTokens(deploymentId, endDate, expiresDays = 14
   const map = {}
   for (const t of data ?? []) map[t.type] = t.token
   return map
+}
+
+export async function updateDeployment(id, patch) {
+  const next = {}
+  if (patch.hours_served !== undefined) {
+    next.hours_served = patch.hours_served === '' || patch.hours_served == null
+      ? null
+      : Number(patch.hours_served)
+  }
+  if (patch.mande_track !== undefined) next.mande_track = patch.mande_track
+  if (!Object.keys(next).length) return null
+  const { data, error } = await supabase.from('deployments').update(next).eq('id', id).select().single()
+  if (error) throwDb(error)
+  return data
 }
 
 export async function updateDeploymentStatus(id, status) {
@@ -369,6 +402,36 @@ const VIRTUAL_SURVEYS = [
     definition: {},
     _virtual: true,
   },
+  {
+    id: 'virtual-volunteer-external',
+    key: 'volunteer_external',
+    title: 'Volunteer Self-Report Survey (External)',
+    description: 'External / publication-ready volunteer experience questionnaire.',
+    status: 'PUBLISHED',
+    scheduled_at: null,
+    published_at: null,
+    closed_at: null,
+    default_expiry_days: 14,
+    updated_at: null,
+    is_builtin: true,
+    definition: {},
+    _virtual: true,
+  },
+  {
+    id: 'virtual-org-external',
+    key: 'org_external',
+    title: 'Organisation Feedback Survey (External)',
+    description: 'External / publication-ready organisation assessment questionnaire.',
+    status: 'PUBLISHED',
+    scheduled_at: null,
+    published_at: null,
+    closed_at: null,
+    default_expiry_days: 14,
+    updated_at: null,
+    is_builtin: true,
+    definition: {},
+    _virtual: true,
+  },
 ]
 
 const EMPTY_DEFINITION = { type: 'custom', likertSections: [], overall: { title: 'Overall', sliders: [], radios: [] }, feedback: { title: 'Additional comments', note: 'Optional.', fields: [] } }
@@ -393,15 +456,28 @@ function isMissingTableError(error) {
 }
 
 function responseTable(key) {
-  return key === 'org' ? 'org_surveys' : 'volunteer_surveys'
+  return isOrgSurveyKey(key) ? 'org_surveys' : 'volunteer_surveys'
+}
+
+function trackFilterForBuiltinKey(key) {
+  return trackFromSurveyKey(key)
 }
 
 async function countResponses(survey) {
   if (survey.is_builtin) {
     const table = responseTable(survey.key)
+    const track = trackFilterForBuiltinKey(survey.key)
     const [{ count, error: countErr }, { data: latestRows, error: latestErr }] = await Promise.all([
-      supabase.from(table).select('id', { count: 'exact', head: true }),
-      supabase.from(table).select('submitted_at').order('submitted_at', { ascending: false }).limit(1),
+      supabase
+        .from(table)
+        .select('id, deployments!inner(mande_track)', { count: 'exact', head: true })
+        .eq('deployments.mande_track', track),
+      supabase
+        .from(table)
+        .select('submitted_at, deployments!inner(mande_track)')
+        .eq('deployments.mande_track', track)
+        .order('submitted_at', { ascending: false })
+        .limit(1),
     ])
     if (countErr) throwDb(countErr)
     if (latestErr) throwDb(latestErr)
@@ -490,15 +566,17 @@ export async function deleteSurvey(id) {
 export async function fetchSurveyResponses(survey) {
   if (survey.is_builtin) {
     const table = responseTable(survey.key)
+    const track = trackFilterForBuiltinKey(survey.key)
     const { data, error } = await supabase
       .from(table)
       .select(
-        `*, deployments:deployment_id (
-           id, role_title, start_date, end_date, status,
+        `*, deployments:deployment_id!inner (
+           id, role_title, start_date, end_date, status, mande_track,
            volunteers ( id, full_name, volunteer_id, email ),
            organisations ( id, name, sector )
          )`
       )
+      .eq('deployments.mande_track', track)
       .order('submitted_at', { ascending: false })
     if (error) throwDb(error)
     return (data ?? []).map((r) => {

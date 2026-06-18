@@ -8,6 +8,7 @@ import { fetchSurveyResponses, updateSurvey, getSurveyConfig } from '../../api/d
 import { downloadSurveyResponsesCsv } from '../../utils/csv'
 import { toast } from '../../store/toastStore'
 import { copyToClipboard } from '../../utils/mapApiError'
+import { isOrgSurveyKey, builtInAudienceLabel } from '../../utils/surveyKeys'
 
 export const SURVEY_STATUSES = ['DRAFT', 'SCHEDULED', 'PUBLISHED', 'CLOSED']
 
@@ -55,7 +56,7 @@ export default function SurveyManager({ survey, canWrite, onClose, onPreview }) 
             <div className="mb-1.5 flex items-center gap-2">
               <StatusBadge status={survey.status} />
               <span className="rounded bg-afri-lavender/60 px-2 py-0.5 text-xs font-medium text-afri-purple">
-                {survey.is_builtin ? (survey.key === 'org' ? 'Organisation' : 'Volunteer') : survey.audience || 'Custom'}
+                {survey.is_builtin ? builtInAudienceLabel(survey.key) : survey.audience || 'Custom'}
               </span>
             </div>
             <h2 className="truncate font-heading text-h2 text-afri-purple">{survey.title}</h2>
@@ -148,7 +149,7 @@ function ResponsesTab({ survey, config }) {
   }, [data, search])
 
   const columns = useMemo(() => buildResponseColumns(survey), [survey])
-  const csvOpts = { isCustom: !survey.is_builtin, isOrg: survey.key === 'org' }
+  const csvOpts = { isCustom: !survey.is_builtin, isOrg: isOrgSurveyKey(survey.key) }
 
   if (isLoading) return <Spinner className="py-16" label="Loading responses" />
   if (error)
@@ -258,7 +259,7 @@ function buildResponseColumns(survey) {
     },
   ]
 
-  if (key === 'org') {
+  if (isOrgSurveyKey(key)) {
     return [
       {
         key: 'supervisor',
@@ -348,7 +349,7 @@ function ResponseDetail({ response, survey, config, csvOpts, onClose }) {
   const surveyKey = survey.key
   const who = !survey.is_builtin
     ? response.respondent_name || 'Anonymous respondent'
-    : surveyKey === 'org'
+    : isOrgSurveyKey(surveyKey)
       ? response.supervisor_name || 'Organisation'
       : response.volunteer?.full_name || 'Volunteer'
 

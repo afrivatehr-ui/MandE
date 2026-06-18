@@ -66,8 +66,11 @@ Deno.serve(async (req) => {
     data: { user },
   } = await userClient.auth.getUser()
   if (!user) return json({ success: false, error: 'Not authenticated.' }, 401)
+
   const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'ADMIN') return json({ success: false, error: 'Admin access required.' }, 403)
+  if (profile?.role !== 'ADMIN') {
+    return json({ success: false, error: 'Admin access required.' }, 403)
+  }
 
   try {
     const body = await req.json().catch(() => null)

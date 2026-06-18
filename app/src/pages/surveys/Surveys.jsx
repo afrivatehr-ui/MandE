@@ -6,6 +6,8 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 import { fetchSurveys, updateSurvey, deleteSurvey } from '../../api/data'
 import { useAuthStore, isWriter } from '../../store/authStore'
 import { toast } from '../../store/toastStore'
+import { builtInAudienceLabel, trackBadgeLabel } from '../../utils/surveyKeys'
+import { mapApiError } from '../../utils/mapApiError'
 import SurveyManager, { StatusBadge } from './SurveyManager'
 import SurveyPreview from './SurveyPreview'
 import SurveyBuilder from './SurveyBuilder'
@@ -63,7 +65,7 @@ export default function Surveys() {
   if (error)
     return (
       <div className="rounded-card border border-afri-red/30 bg-afri-red/5 p-5 font-body text-sm text-afri-red">
-        Couldn't load surveys: {error?.message || 'unknown error'}
+        Couldn&apos;t load surveys: {error?.message || mapApiError(error)}
       </div>
     )
 
@@ -147,13 +149,13 @@ function SurveyCard({ survey, canWrite, busy, onOpen, onPreview, onSetStatus, on
         <span
           className={`rounded px-2 py-1 text-xs font-semibold ${
             survey.is_builtin
-              ? survey.key === 'volunteer'
+              ? String(survey.key).startsWith('volunteer')
                 ? 'bg-afri-blue/20 text-afri-blue'
                 : 'bg-afri-green/20 text-afri-green'
               : 'bg-afri-purple/15 text-afri-purple'
           }`}
         >
-          {survey.is_builtin ? (survey.key === 'volunteer' ? 'Volunteer' : 'Organisation') : survey.audience || 'Custom'}
+          {survey.is_builtin ? builtInAudienceLabel(survey.key) : survey.audience || 'Custom'}
         </span>
         <StatusBadge status={survey.status} />
       </div>
@@ -164,7 +166,7 @@ function SurveyCard({ survey, canWrite, busy, onOpen, onPreview, onSetStatus, on
       <dl className="my-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-afri-lavender/60 py-4">
         <Meta label="Responses" value={survey.responseCount ?? 0} />
         <Meta label="Last response" value={fmtDate(survey.lastResponseAt)} />
-        <Meta label="Type" value={survey.is_builtin ? 'Built-in (VPI)' : 'Custom'} />
+        <Meta label="Type" value={survey.is_builtin ? `Built-in · ${trackBadgeLabel(survey.key)}` : 'Custom'} />
         {survey.status === 'SCHEDULED' ? (
           <Meta label="Scheduled" value={fmtDate(survey.scheduled_at)} />
         ) : (
